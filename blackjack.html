@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>21点豪华版</title>
+  <style>
+    :root {
+      --bg-dark: #0b0f0d;
+      --bg-green: #0f2e1b;
+      --bg-green-2: #0b3a23;
+      --gold: #d6b26a;
+      --gold-2: #b98a3e;
+      --accent: #c43b4a;
+      --ivory: #f5f0e6;
+      --ink: #1b1b1b;
+      --mint: #48d1a6;
+      --shadow: rgba(0, 0, 0, 0.45);
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(1200px 600px at 15% 10%, rgba(214, 178, 106, 0.15), transparent 60%),
+        radial-gradient(800px 500px at 85% 20%, rgba(72, 209, 166, 0.12), transparent 60%),
+        linear-gradient(160deg, #0b0f0d 0%, #0f1d13 40%, #0b0f0d 100%);
+      font-family: "Noto Serif SC", "STSong", "Songti SC", serif;
+      color: var(--ivory);
+    }
+    .wrap {
+      width: min(1000px, 92vw);
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 24px;
+      padding: 28px;
+      background: linear-gradient(145deg, rgba(15, 36, 24, 0.95), rgba(10, 24, 16, 0.95));
+      border: 1px solid rgba(214, 178, 106, 0.4);
+      border-radius: 18px;
+      box-shadow: 0 25px 60px var(--shadow);
+      position: relative;
+    }
+    .wrap::before {
+      content: "";
+      position: absolute;
+      inset: 10px;
+      border: 1px solid rgba(214, 178, 106, 0.2);
+      border-radius: 14px;
+      pointer-events: none;
+    }
+    header {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .title {
+      font-size: clamp(26px, 3vw, 36px);
+      letter-spacing: 4px;
+      margin: 0;
+      color: var(--gold);
+    }
+    .subtitle {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: rgba(245, 240, 230, 0.7);
+    }
+    .table {
+      background: radial-gradient(circle at 50% 30%, rgba(72, 209, 166, 0.08), transparent 70%),
+        linear-gradient(165deg, var(--bg-green) 0%, var(--bg-green-2) 100%);
+      border-radius: 16px;
+      padding: 18px;
+      border: 1px solid rgba(214, 178, 106, 0.35);
+      position: relative;
+      overflow: hidden;
+    }
+    .table::after {
+      content: "";
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      left: -50%;
+      top: -50%;
+      background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0, rgba(255, 255, 255, 0.05) 2px, transparent 2px, transparent 8px);
+      opacity: 0.06;
+      pointer-events: none;
+    }
+    #gameCanvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 12px;
+      border: 2px solid rgba(214, 178, 106, 0.6);
+      background: #0f2e1b;
+      box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.5);
+    }
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .score {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .score-card {
+      background: rgba(15, 24, 18, 0.8);
+      border: 1px solid rgba(214, 178, 106, 0.3);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .score-card span {
+      font-size: 12px;
+      color: rgba(245, 240, 230, 0.6);
+      letter-spacing: 2px;
+    }
+    .score-card strong {
+      font-size: 26px;
+      color: var(--gold);
+    }
+    .bankroll {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .chip {
+      background: radial-gradient(circle at 30% 30%, #ffd98e, #b07b32 70%);
+      color: #1a1205;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 10px 12px;
+      text-align: center;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      box-shadow: inset 0 0 6px rgba(255, 255, 255, 0.3), 0 8px 18px rgba(0, 0, 0, 0.35);
+    }
+    .chip.alt {
+      background: radial-gradient(circle at 30% 30%, #ffb3be, #c43b4a 70%);
+      color: #1b0a0f;
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    button {
+      padding: 12px 14px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      color: var(--ivory);
+      background: linear-gradient(160deg, #2f7f4f, #1d5a39);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
+      transition: transform 0.15s ease, opacity 0.2s ease;
+    }
+    button:hover {
+      transform: translateY(-2px);
+    }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+    #standButton {
+      background: linear-gradient(160deg, #b43b48, #7d1f2a);
+    }
+    #newGameButton {
+      background: linear-gradient(160deg, #c7a45d, #8b6a2b);
+      color: #1a1205;
+    }
+    #doubleButton {
+      background: linear-gradient(160deg, #4a9a91, #2c6c66);
+    }
+    .status {
+      min-height: 56px;
+      padding: 12px 14px;
+      background: rgba(15, 24, 18, 0.85);
+      border-radius: 12px;
+      border: 1px solid rgba(214, 178, 106, 0.3);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .status strong {
+      color: var(--mint);
+    }
+    .history {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .badge {
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: rgba(214, 178, 106, 0.15);
+      border: 1px solid rgba(214, 178, 106, 0.4);
+    }
+    @media (max-width: 860px) {
+      .wrap {
+        grid-template-columns: 1fr;
+      }
+      .actions {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div>
+      <header>
+        <p class="subtitle">Grand Royale Casino</p>
+        <h1 class="title">21点 豪华版</h1>
+      </header>
+      <div class="table">
+        <canvas id="gameCanvas" width="620" height="520"></canvas>
+      </div>
+    </div>
+    <aside class="panel">
+      <div class="score">
+        <div class="score-card">
+          <span>庄家</span>
+          <strong id="dealerScore">0</strong>
+        </div>
+        <div class="score-card">
+          <span>玩家</span>
+          <strong id="playerScore">0</strong>
+        </div>
+      </div>
+      <div class="bankroll">
+        <div class="chip">筹码：<span id="bankroll">500</span></div>
+        <div class="chip alt">当前下注：<span id="currentBet">20</span></div>
+      </div>
+      <div class="actions">
+        <button id="hitButton">要牌</button>
+        <button id="standButton">停牌</button>
+        <button id="doubleButton">加倍</button>
+        <button id="newGameButton">新游戏</button>
+      </div>
+      <div class="status">
+        <div>提示：A 可算 1 或 11，庄家 17 点以上停牌。</div>
+        <strong id="roundMessage">点击“新游戏”开始</strong>
+      </div>
+      <div>
+        <div style="margin-bottom: 8px; font-size: 12px; letter-spacing: 2px; color: rgba(245, 240, 230, 0.6);">最近战绩</div>
+        <div class="history" id="history"></div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const dealerScoreDisplay = document.getElementById('dealerScore');
+    const playerScoreDisplay = document.getElementById('playerScore');
+    const hitButton = document.getElementById('hitButton');
+    const standButton = document.getElementById('standButton');
+    const newGameButton = document.getElementById('newGameButton');
+    const doubleButton = document.getElementById('doubleButton');
+    const bankrollDisplay = document.getElementById('bankroll');
+    const currentBetDisplay = document.getElementById('currentBet');
+    const roundMessage = document.getElementById('roundMessage');
+    const historyEl = document.getElementById('history');
+
+    const SUITS = ['♠', '♥', '♦', '♣'];
+    const VALUES = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+
+    let deck = [];
+    let playerHand = [];
+    let dealerHand = [];
+    let gameOver = false;
+    let playerStands = false;
+    let audioCtx = null;
+    let bankroll = 500;
+    let baseBet = 20;
+    let currentBet = 20;
+    let history = [];
+    let dealerHide = true;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playSound(type) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+
+      if (type === 'deal') {
+        osc.frequency.setValueAtTime(600, now);
+        osc.type = 'triangle';
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      } else if (type === 'win') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523, now);
+        osc.frequency.setValueAtTime(784, now + 0.1);
+        osc.frequency.setValueAtTime(1047, now + 0.25);
+        gain.gain.setValueAtTime(0.22, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === 'lose') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now + 0.35);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      } else if (type === 'push') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.setValueAtTime(440, now + 0.2);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc.start(now);
+        osc.stop(now + 0.25);
+      }
+    }
+
+    function createDeck() {
+      deck = [];
+      for (let suit of SUITS) {
+        for (let value of VALUES) {
+          deck.push({ suit, value });
+        }
+      }
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+    }
+
+    function getCardValue(card) {
+      if (['J', 'Q', 'K'].includes(card.value)) return 10;
+      if (card.value === 'A') return 11;
+      return parseInt(card.value, 10);
+    }
+
+    function calculateScore(hand) {
+      let score = 0;
+      let aces = 0;
+      for (let card of hand) {
+        score += getCardValue(card);
+        if (card.value === 'A') aces++;
+      }
+      while (score > 21 && aces > 0) {
+        score -= 10;
+        aces--;
+      }
+      return score;
+    }
+
+    function drawCard(card, x, y, hidden = false) {
+      ctx.fillStyle = '#f5f0e6';
+      ctx.fillRect(x, y, 70, 100);
+
+      ctx.strokeStyle = '#2c2c2c';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, 70, 100);
+
+      if (hidden) {
+        ctx.fillStyle = '#c43b4a';
+        ctx.fillRect(x + 4, y + 4, 62, 92);
+        ctx.fillStyle = '#fff';
+        ctx.font = '28px serif';
+        ctx.fillText('?', x + 27, y + 62);
+        return;
+      }
+
+      const isRed = card.suit === '♥' || card.suit === '♦';
+      ctx.fillStyle = isRed ? '#c43b4a' : '#111';
+
+      ctx.font = 'bold 18px serif';
+      ctx.fillText(card.value, x + 6, y + 24);
+      ctx.font = '26px serif';
+      ctx.fillText(card.suit, x + 36, y + 40);
+
+      ctx.font = '12px serif';
+      ctx.fillText(card.value, x + 44, y + 88);
+      ctx.fillText(card.suit, x + 20, y + 72);
+    }
+
+    function drawTableFrame() {
+      ctx.fillStyle = '#0f2e1b';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = 'rgba(214, 178, 106, 0.5)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+    }
+
+    function drawHands() {
+      drawTableFrame();
+
+      ctx.fillStyle = '#f5f0e6';
+      ctx.font = '18px serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('庄家', 30, 50);
+      ctx.fillText('玩家', 30, 270);
+
+      dealerHand.forEach((card, i) => {
+        const hidden = dealerHide && i === 1 && !gameOver;
+        drawCard(card, 120 + i * 50, 70, hidden);
+      });
+
+      playerHand.forEach((card, i) => {
+        drawCard(card, 120 + i * 50, 290);
+      });
+
+      if (gameOver) {
+        ctx.font = 'bold 32px serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.fillRect(canvas.width / 2 - 170, 210, 340, 70);
+        ctx.fillStyle = '#f5f0e6';
+        ctx.fillText(roundMessage.textContent, canvas.width / 2, 260);
+      }
+    }
+
+    function updateScores() {
+      const dealerScore = dealerHide && !gameOver
+        ? getCardValue(dealerHand[0])
+        : calculateScore(dealerHand);
+      dealerScoreDisplay.textContent = dealerScore;
+      playerScoreDisplay.textContent = calculateScore(playerHand);
+    }
+
+    function updateBankroll() {
+      bankrollDisplay.textContent = bankroll;
+      currentBetDisplay.textContent = currentBet;
+    }
+
+    function pushHistory(result) {
+      history.unshift(result);
+      history = history.slice(0, 6);
+      historyEl.innerHTML = '';
+      history.forEach((item) => {
+        const badge = document.createElement('span');
+        badge.className = 'badge';
+        badge.textContent = item;
+        historyEl.appendChild(badge);
+      });
+    }
+
+    function settle(result, payout) {
+      bankroll += payout;
+      updateBankroll();
+      pushHistory(result);
+    }
+
+    function startGame() {
+      initAudio();
+      if (bankroll < baseBet) {
+        roundMessage.textContent = '筹码不足，请刷新重开';
+        drawHands();
+        return;
+      }
+      createDeck();
+      playerHand = [deck.pop(), deck.pop()];
+      dealerHand = [deck.pop(), deck.pop()];
+      currentBet = baseBet;
+      bankroll -= currentBet;
+      dealerHide = true;
+      gameOver = false;
+      playerStands = false;
+
+      hitButton.disabled = false;
+      standButton.disabled = false;
+      doubleButton.disabled = false;
+      roundMessage.textContent = '好运，准备起牌';
+      updateBankroll();
+      updateScores();
+      drawHands();
+
+      if (calculateScore(playerHand) === 21) {
+        finishRound(true);
+      }
+    }
+
+    function hit() {
+      if (gameOver) return;
+      playerHand.push(deck.pop());
+      playSound('deal');
+      updateScores();
+      drawHands();
+      if (calculateScore(playerHand) > 21) {
+        finishRound(false);
+      }
+    }
+
+    function stand() {
+      if (gameOver) return;
+      playerStands = true;
+      finishRound(false);
+    }
+
+    function doubleDown() {
+      if (gameOver) return;
+      if (bankroll < currentBet) return;
+      bankroll -= currentBet;
+      currentBet *= 2;
+      updateBankroll();
+      playerHand.push(deck.pop());
+      playSound('deal');
+      updateScores();
+      drawHands();
+      finishRound(false);
+    }
+
+    function dealerPlay() {
+      dealerHide = false;
+      let dealerScore = calculateScore(dealerHand);
+      while (dealerScore < 17) {
+        dealerHand.push(deck.pop());
+        dealerScore = calculateScore(dealerHand);
+      }
+      updateScores();
+    }
+
+    function finishRound(playerBlackjack) {
+      gameOver = true;
+      hitButton.disabled = true;
+      standButton.disabled = true;
+      doubleButton.disabled = true;
+      dealerPlay();
+
+      const playerScore = calculateScore(playerHand);
+      const dealerScore = calculateScore(dealerHand);
+      let result = '';
+      let payout = 0;
+
+      if (playerScore > 21) {
+        result = '爆牌';
+        roundMessage.textContent = '爆牌 你输了';
+        playSound('lose');
+      } else if (playerBlackjack && playerHand.length === 2) {
+        result = '黑杰克';
+        payout = Math.floor(currentBet * 2.5);
+        roundMessage.textContent = '黑杰克！豪华胜利';
+        playSound('win');
+      } else if (dealerScore > 21) {
+        result = '庄家爆牌';
+        payout = currentBet * 2;
+        roundMessage.textContent = '庄家爆牌 你赢了';
+        playSound('win');
+      } else if (playerScore > dealerScore) {
+        result = '胜利';
+        payout = currentBet * 2;
+        roundMessage.textContent = '你赢了';
+        playSound('win');
+      } else if (playerScore < dealerScore) {
+        result = '失利';
+        roundMessage.textContent = '你输了';
+        playSound('lose');
+      } else {
+        result = '平局';
+        payout = currentBet;
+        roundMessage.textContent = '平局 返还筹码';
+        playSound('push');
+      }
+      settle(result, payout);
+      drawHands();
+    }
+
+    hitButton.addEventListener('click', hit);
+    standButton.addEventListener('click', stand);
+    newGameButton.addEventListener('click', startGame);
+    doubleButton.addEventListener('click', doubleDown);
+
+    hitButton.disabled = true;
+    standButton.disabled = true;
+    doubleButton.disabled = true;
+    updateBankroll();
+    drawTableFrame();
+    ctx.fillStyle = '#f5f0e6';
+    ctx.font = '20px serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('点击“新游戏”开启豪华牌局', canvas.width / 2, canvas.height / 2);
+  </script>
+</body>
+</html>

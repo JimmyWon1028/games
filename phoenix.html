@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>火鳳凰</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 12px;
+      background: radial-gradient(circle at top, #1d2a44 0%, #090d16 55%, #04070d 100%);
+      color: #d9ecff;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+    h1 {
+      margin: 0;
+      letter-spacing: 6px;
+      color: #8bd9ff;
+      text-shadow: 0 0 12px rgba(139, 217, 255, 0.55);
+    }
+    #panel {
+      width: min(96vw, 520px);
+      display: flex;
+      justify-content: space-between;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    #gameCanvas {
+      width: min(96vw, 520px);
+      aspect-ratio: 3 / 4;
+      border: 3px solid #7fd0ff;
+      border-radius: 10px;
+      background: #03060c;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 18px rgba(127, 208, 255, 0.35);
+      touch-action: none;
+    }
+    .buttons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    button, a {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #f3fbff;
+      text-decoration: none;
+      cursor: pointer;
+      background: linear-gradient(180deg, #3191d0 0%, #1c5885 100%);
+    }
+    button:active, .ctrl:active {
+      transform: translateY(1px);
+    }
+    #hint {
+      font-size: 13px;
+      color: #9eb4cb;
+      text-align: center;
+      line-height: 1.4;
+    }
+    #touchCtrl {
+      width: min(96vw, 520px);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .ctrl {
+      padding: 12px 8px;
+      text-align: center;
+      border-radius: 8px;
+      user-select: none;
+      font-weight: 700;
+      background: linear-gradient(180deg, #2d425a 0%, #172434 100%);
+      border: 1px solid #47698b;
+    }
+  </style>
+</head>
+<body>
+  <h1>火鳳凰</h1>
+  <div id="panel">
+    <div>分數: <span id="score">0</span></div>
+    <div>生命: <span id="lives">3</span></div>
+    <div>波次: <span id="wave">1</span></div>
+    <div>護盾: <span id="shield">100</span>%</div>
+  </div>
+  <canvas id="gameCanvas" width="480" height="640"></canvas>
+  <div class="buttons">
+    <button id="startBtn">開始遊戲</button>
+    <a href="index.html">返回大廳</a>
+  </div>
+  <div id="touchCtrl">
+    <div class="ctrl" id="leftBtn">左移</div>
+    <div class="ctrl" id="fireBtn">射擊</div>
+    <div class="ctrl" id="rightBtn">右移</div>
+    <div class="ctrl" id="shieldBtn">護盾</div>
+  </div>
+  <div id="hint">鍵盤: ← → 移動、空白鍵射擊、Shift 開護盾</div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const waveEl = document.getElementById('wave');
+    const shieldEl = document.getElementById('shield');
+    const startBtn = document.getElementById('startBtn');
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const keys = { left: false, right: false, fire: false, shield: false };
+
+    let gameRunning = false;
+    let gameOver = false;
+    let score = 0;
+    let lives = 3;
+    let wave = 1;
+    let shieldEnergy = 100;
+    let shieldActive = false;
+
+    let lastShot = 0;
+    let lastEnemyShot = 0;
+    let waveClearAt = 0;
+    let animationId = null;
+
+    const player = {
+      x: W / 2,
+      y: H - 64,
+      w: 36,
+      h: 28,
+      speed: 5
+    };
+
+    let bullets = [];
+    let enemyBullets = [];
+    let enemies = [];
+    let stars = [];
+    let formation = { x: 0, y: 70, dir: 1, speed: 1.2 };
+    let boss = null;
+
+    function resetGame() {
+      score = 0;
+      lives = 3;
+      wave = 1;
+      shieldEnergy = 100;
+      shieldActive = false;
+      bullets = [];
+      enemyBullets = [];
+      enemies = [];
+      boss = null;
+      formation = { x: 0, y: 70, dir: 1, speed: 1.2 };
+      player.x = W / 2;
+      gameOver = false;
+      waveClearAt = 0;
+      initStars();
+      spawnWave(wave);
+      syncPanel();
+    }
+
+    function initStars() {
+      stars = [];
+      for (let i = 0; i < 70; i += 1) {
+        stars.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          size: Math.random() * 2 + 0.5,
+          speed: Math.random() * 1.4 + 0.3
+        });
+      }
+    }
+
+    function spawnWave(level) {
+      enemies = [];
+      boss = null;
+      formation.x = 0;
+      formation.y = 70;
+      formation.dir = 1;
+      formation.speed = Math.min(2.2, 1 + level * 0.08);
+
+      if (level % 4 === 0) {
+        boss = {
+          x: W / 2,
+          y: 88,
+          w: 160,
+          h: 62,
+          hp: 34 + level * 8,
+          maxHp: 34 + level * 8,
+          dir: 1,
+          speed: 1.7 + level * 0.06
+        };
+        return;
+      }
+
+      const rows = Math.min(5, 2 + Math.floor(level / 2));
+      const cols = 8;
+      const sx = 48;
+      const sy = 42;
+      const hpBase = level >= 5 ? 2 : 1;
+
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          enemies.push({
+            ox: sx + c * 48,
+            oy: sy + r * 42,
+            x: sx + c * 48,
+            y: sy + r * 42,
+            hp: r === 0 && level >= 7 ? hpBase + 1 : hpBase,
+            type: r % 2
+          });
+        }
+      }
+    }
+
+    function syncPanel() {
+      scoreEl.textContent = score;
+      livesEl.textContent = lives;
+      waveEl.textContent = wave;
+      shieldEl.textContent = Math.max(0, Math.round(shieldEnergy));
+    }
+
+    function shoot(now) {
+      if (now - lastShot < 180) return;
+      bullets.push({ x: player.x, y: player.y - 20, v: 8.5 });
+      lastShot = now;
+    }
+
+    function enemyShoot(now) {
+      const interval = Math.max(260, 900 - wave * 35);
+      if (now - lastEnemyShot < interval) return;
+
+      if (boss) {
+        enemyBullets.push({ x: boss.x - 42, y: boss.y + boss.h / 2, v: 4.5 + wave * 0.08 });
+        enemyBullets.push({ x: boss.x, y: boss.y + boss.h / 2, v: 5.2 + wave * 0.08 });
+        enemyBullets.push({ x: boss.x + 42, y: boss.y + boss.h / 2, v: 4.5 + wave * 0.08 });
+      } else if (enemies.length > 0) {
+        const shooter = enemies[Math.floor(Math.random() * enemies.length)];
+        enemyBullets.push({ x: shooter.x, y: shooter.y + 18, v: 3.8 + wave * 0.05 });
+      }
+
+      lastEnemyShot = now;
+    }
+
+    function hitPlayer() {
+      if (shieldActive) return;
+      lives -= 1;
+      syncPanel();
+      if (lives <= 0) {
+        gameRunning = false;
+        gameOver = true;
+        startBtn.textContent = '再玩一次';
+      }
+    }
+
+    function update(now) {
+      if (!gameRunning) return;
+
+      if (keys.left) player.x -= player.speed;
+      if (keys.right) player.x += player.speed;
+      player.x = Math.max(player.w / 2 + 8, Math.min(W - player.w / 2 - 8, player.x));
+
+      if (keys.fire) shoot(now);
+
+      shieldActive = keys.shield && shieldEnergy > 0;
+      if (shieldActive) {
+        shieldEnergy -= 0.65;
+      } else {
+        shieldEnergy += 0.22;
+      }
+      shieldEnergy = Math.max(0, Math.min(100, shieldEnergy));
+
+      for (const s of stars) {
+        s.y += s.speed;
+        if (s.y > H) {
+          s.y = -2;
+          s.x = Math.random() * W;
+        }
+      }
+
+      for (let i = bullets.length - 1; i >= 0; i -= 1) {
+        bullets[i].y -= bullets[i].v;
+        if (bullets[i].y < -12) bullets.splice(i, 1);
+      }
+
+      for (let i = enemyBullets.length - 1; i >= 0; i -= 1) {
+        enemyBullets[i].y += enemyBullets[i].v;
+        if (enemyBullets[i].y > H + 12) {
+          enemyBullets.splice(i, 1);
+          continue;
+        }
+
+        const b = enemyBullets[i];
+        if (
+          Math.abs(b.x - player.x) < player.w / 2 &&
+          Math.abs(b.y - player.y) < player.h / 2
+        ) {
+          enemyBullets.splice(i, 1);
+          hitPlayer();
+        }
+      }
+
+      if (boss) {
+        boss.x += boss.dir * boss.speed;
+        if (boss.x < boss.w / 2 + 12 || boss.x > W - boss.w / 2 - 12) {
+          boss.dir *= -1;
+          boss.y += 8;
+        }
+
+        for (let i = bullets.length - 1; i >= 0; i -= 1) {
+          const b = bullets[i];
+          if (
+            Math.abs(b.x - boss.x) < boss.w / 2 &&
+            Math.abs(b.y - boss.y) < boss.h / 2
+          ) {
+            bullets.splice(i, 1);
+            boss.hp -= 1;
+            score += 18;
+            if (boss.hp <= 0) {
+              score += 300;
+              boss = null;
+              waveClearAt = now;
+              break;
+            }
+          }
+        }
+
+        if (boss && boss.y + boss.h / 2 > player.y - 24) {
+          lives = 0;
+          syncPanel();
+          gameRunning = false;
+          gameOver = true;
+          startBtn.textContent = '再玩一次';
+        }
+      } else if (enemies.length > 0) {
+        formation.x += formation.dir * formation.speed;
+        let minX = 9999;
+        let maxX = -9999;
+
+        for (const e of enemies) {
+          e.x = e.ox + formation.x;
+          e.y = e.oy + formation.y + Math.sin((now / 200) + e.ox * 0.06) * 3;
+          minX = Math.min(minX, e.x);
+          maxX = Math.max(maxX, e.x);
+        }
+
+        if (minX < 20 || maxX > W - 20) {
+          formation.dir *= -1;
+          formation.y += 18;
+        }
+
+        for (let i = enemies.length - 1; i >= 0; i -= 1) {
+          if (enemies[i].y > player.y - 18) {
+            lives = 0;
+            syncPanel();
+            gameRunning = false;
+            gameOver = true;
+            startBtn.textContent = '再玩一次';
+            break;
+          }
+        }
+
+        for (let i = bullets.length - 1; i >= 0; i -= 1) {
+          const b = bullets[i];
+          for (let j = enemies.length - 1; j >= 0; j -= 1) {
+            const e = enemies[j];
+            if (Math.abs(b.x - e.x) < 16 && Math.abs(b.y - e.y) < 14) {
+              bullets.splice(i, 1);
+              e.hp -= 1;
+              if (e.hp <= 0) {
+                enemies.splice(j, 1);
+                score += 25 + (wave * 2);
+              }
+              break;
+            }
+          }
+        }
+
+        if (enemies.length === 0) {
+          waveClearAt = now;
+        }
+      }
+
+      if (!waveClearAt && gameRunning) {
+        enemyShoot(now);
+      }
+
+      if (waveClearAt && now - waveClearAt > 900) {
+        wave += 1;
+        spawnWave(wave);
+        waveClearAt = 0;
+      }
+
+      syncPanel();
+    }
+
+    function drawBackground() {
+      ctx.fillStyle = '#03060c';
+      ctx.fillRect(0, 0, W, H);
+      for (const s of stars) {
+        ctx.fillStyle = `rgba(215, 237, 255, ${0.4 + s.size * 0.25})`;
+        ctx.fillRect(s.x, s.y, s.size, s.size);
+      }
+    }
+
+    function drawPlayer() {
+      ctx.fillStyle = '#82ddff';
+      ctx.beginPath();
+      ctx.moveTo(player.x, player.y - player.h / 2);
+      ctx.lineTo(player.x - player.w / 2, player.y + player.h / 2);
+      ctx.lineTo(player.x, player.y + player.h / 4);
+      ctx.lineTo(player.x + player.w / 2, player.y + player.h / 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#1a85c8';
+      ctx.fillRect(player.x - 4, player.y - 4, 8, 16);
+
+      if (shieldActive) {
+        ctx.strokeStyle = 'rgba(111, 219, 255, 0.8)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y, 30, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    function drawBullets() {
+      ctx.fillStyle = '#ffde66';
+      for (const b of bullets) {
+        ctx.fillRect(b.x - 2, b.y - 10, 4, 10);
+      }
+
+      ctx.fillStyle = '#ff7b63';
+      for (const b of enemyBullets) {
+        ctx.fillRect(b.x - 2.5, b.y, 5, 10);
+      }
+    }
+
+    function drawEnemy(e) {
+      const wing = e.type === 0 ? '#ff944d' : '#ffbe52';
+      const core = e.type === 0 ? '#ff5f47' : '#ff7a3a';
+
+      ctx.fillStyle = wing;
+      ctx.beginPath();
+      ctx.moveTo(e.x - 16, e.y + 8);
+      ctx.quadraticCurveTo(e.x - 30, e.y - 2, e.x - 12, e.y - 12);
+      ctx.lineTo(e.x - 6, e.y + 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(e.x + 16, e.y + 8);
+      ctx.quadraticCurveTo(e.x + 30, e.y - 2, e.x + 12, e.y - 12);
+      ctx.lineTo(e.x + 6, e.y + 2);
+      ctx.fill();
+
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.ellipse(e.x, e.y, 10, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (e.hp > 1) {
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(e.x - 6, e.y - 20, 12, 3);
+      }
+    }
+
+    function drawBoss() {
+      if (!boss) return;
+      ctx.fillStyle = '#6f3b2f';
+      ctx.beginPath();
+      ctx.roundRect(boss.x - boss.w / 2, boss.y - boss.h / 2, boss.w, boss.h, 16);
+      ctx.fill();
+
+      ctx.fillStyle = '#d9774f';
+      ctx.fillRect(boss.x - 58, boss.y - 12, 116, 24);
+      ctx.fillStyle = '#f6d49b';
+      ctx.fillRect(boss.x - 30, boss.y - 8, 60, 16);
+
+      const hpRate = Math.max(0, boss.hp / boss.maxHp);
+      ctx.fillStyle = '#23323f';
+      ctx.fillRect(20, 16, W - 40, 10);
+      ctx.fillStyle = '#ff7f63';
+      ctx.fillRect(20, 16, (W - 40) * hpRate, 10);
+    }
+
+    function drawTexts() {
+      if (!gameRunning && !gameOver) {
+        ctx.fillStyle = '#d6e9ff';
+        ctx.textAlign = 'center';
+        ctx.font = '20px Segoe UI';
+        ctx.fillText('按開始遊戲進入戰場', W / 2, H / 2 - 18);
+        ctx.font = '15px Segoe UI';
+        ctx.fillText('火鳳凰每 4 波出現 Boss', W / 2, H / 2 + 16);
+      }
+
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#ffe2bf';
+        ctx.textAlign = 'center';
+        ctx.font = '36px Segoe UI';
+        ctx.fillText('遊戲結束', W / 2, H / 2 - 18);
+        ctx.font = '20px Segoe UI';
+        ctx.fillText(`最終分數: ${score}`, W / 2, H / 2 + 20);
+      }
+    }
+
+    function draw() {
+      drawBackground();
+      for (const e of enemies) drawEnemy(e);
+      drawBoss();
+      drawBullets();
+      drawPlayer();
+      drawTexts();
+    }
+
+    function loop(ts) {
+      update(ts);
+      draw();
+      animationId = requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+      resetGame();
+      gameRunning = true;
+      startBtn.textContent = '重新開始';
+    }
+
+    function setControlState(key, state) {
+      keys[key] = state;
+    }
+
+    function bindHold(id, key) {
+      const el = document.getElementById(id);
+      const on = (event) => {
+        event.preventDefault();
+        setControlState(key, true);
+      };
+      const off = (event) => {
+        event.preventDefault();
+        setControlState(key, false);
+      };
+      el.addEventListener('mousedown', on);
+      el.addEventListener('mouseup', off);
+      el.addEventListener('mouseleave', off);
+      el.addEventListener('touchstart', on, { passive: false });
+      el.addEventListener('touchend', off, { passive: false });
+      el.addEventListener('touchcancel', off, { passive: false });
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft') keys.left = true;
+      else if (event.key === 'ArrowRight') keys.right = true;
+      else if (event.key === ' ' || event.key === 'ArrowUp') keys.fire = true;
+      else if (event.key === 'Shift') keys.shield = true;
+      else return;
+      event.preventDefault();
+    });
+
+    document.addEventListener('keyup', (event) => {
+      if (event.key === 'ArrowLeft') keys.left = false;
+      else if (event.key === 'ArrowRight') keys.right = false;
+      else if (event.key === ' ' || event.key === 'ArrowUp') keys.fire = false;
+      else if (event.key === 'Shift') keys.shield = false;
+      else return;
+      event.preventDefault();
+    });
+
+    startBtn.addEventListener('click', startGame);
+
+    bindHold('leftBtn', 'left');
+    bindHold('fireBtn', 'fire');
+    bindHold('rightBtn', 'right');
+    bindHold('shieldBtn', 'shield');
+
+    resetGame();
+    if (animationId) cancelAnimationFrame(animationId);
+    animationId = requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

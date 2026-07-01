@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>恐龙快跑</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f7f7f7;
+      color: #535353;
+      font-family: "Arial", sans-serif;
+      padding: 14px;
+    }
+
+    .game-shell {
+      width: min(960px, 100%);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background: #f7f7f7;
+    }
+
+    .hint {
+      margin-top: 10px;
+      font-size: 13px;
+      text-align: center;
+      color: #8a8a8a;
+      letter-spacing: 0.3px;
+    }
+
+    .history {
+      margin-top: 12px;
+      border: 1px solid #d8d8d8;
+      padding: 10px 12px;
+      background: #f2f2f2;
+    }
+
+    .history-title {
+      font-size: 13px;
+      color: #616161;
+      margin-bottom: 6px;
+      letter-spacing: 0.4px;
+    }
+
+    .history-list {
+      list-style: none;
+      display: grid;
+      grid-template-columns: 36px 1fr 84px;
+      gap: 4px 8px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #5b5b5b;
+      max-height: 170px;
+      overflow: auto;
+    }
+
+    .history-list li {
+      display: contents;
+    }
+
+    .history-rank {
+      text-align: right;
+      color: #727272;
+    }
+
+    .history-date {
+      color: #626262;
+    }
+
+    .history-score {
+      text-align: right;
+      color: #4e4e4e;
+      font-weight: 700;
+    }
+
+    .history-empty {
+      font-size: 12px;
+      color: #888;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <main class="game-shell">
+    <canvas id="gameCanvas" width="920" height="260" aria-label="恐龙跳跳游戏画布"></canvas>
+    <p class="hint">空格 / 上键 / 点击 / 触摸：跳跃，左右键：横移</p>
+    <section class="history" aria-label="历史高分">
+      <div class="history-title">TOP 10 历史高分</div>
+      <ul id="historyList" class="history-list"></ul>
+      <div id="historyEmpty" class="history-empty">暂无记录</div>
+    </section>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const historyListEl = document.getElementById("historyList");
+    const historyEmptyEl = document.getElementById("historyEmpty");
+
+    const GROUND_Y = 210;
+    const DINO_BASE_X = 60;
+    const DINO_MOVE_SPEED = 5.5;
+    const HI_SCORE_COOKIE = "dino_hi_score";
+    const HI_HISTORY_COOKIE = "dino_hi_history";
+    const HI_SCORE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+    let state = "ready";
+    let score = 0;
+    let hiScore = 0;
+    let speed = 6;
+    let tick = 0;
+    let spawnTimer = 0;
+    let gameOverFlash = 0;
+    let scoreHistory = [];
+    const keys = {
+      left: false,
+      right: false
+    };
+
+    const clouds = [];
+    const obstacles = [];
+
+    const dino = {
+      x: DINO_BASE_X,
+      y: GROUND_Y - 47,
+      w: 44,
+      h: 47,
+      vy: 0,
+      gravity: 0.65,
+      jumpPower: -12.8,
+      grounded: true,
+      runFrame: 0
+    };
+
+    function readHiScoreFromCookie() {
+      const pairs = document.cookie ? document.cookie.split(";") : [];
+      for (const pair of pairs) {
+        const trimmed = pair.trim();
+        if (!trimmed.startsWith(`${HI_SCORE_COOKIE}=`)) continue;
+        const raw = trimmed.slice(HI_SCORE_COOKIE.length + 1);
+        const value = Number.parseInt(raw, 10);
+        return Number.isFinite(value) && value > 0 ? value : 0;
+      }
+      return 0;
+    }
+
+    function formatDate(ts) {
+      const d = new Date(ts);
+      const pad2 = (v) => String(v).padStart(2, "0");
+      const y = d.getFullYear();
+      const m = pad2(d.getMonth() + 1);
+      const day = pad2(d.getDate());
+      const h = pad2(d.getHours());
+      const min = pad2(d.getMinutes());
+      const s = pad2(d.getSeconds());
+      return `${y}-${m}-${day} ${h}:${min}:${s}`;
+    }
+
+    function normalizeHistory(list) {
+      if (!Array.isArray(list)) return [];
+      const normalized = [];
+      for (const item of list) {
+        if (!item || typeof item !== "object") continue;
+        const scoreValue = Number.parseInt(item.score, 10);
+        if (!Number.isFinite(scoreValue) || scoreValue <= 0) continue;
+        const tsValue = Number.parseInt(item.ts, 10);
+        const ts = Number.isFinite(tsValue) ? tsValue : Date.now();
+        const date = typeof item.date === "string" && item.date.trim() ? item.date.trim() : formatDate(ts);
+        normalized.push({ score: scoreValue, date, ts });
+      }
+      normalized.sort((a, b) => (b.score - a.score) || (b.ts - a.ts));
+      return normalized.slice(0, 10);
+    }
+
+    function readHistoryFromCookie() {
+      const pairs = document.cookie ? document.cookie.split(";") : [];
+      for (const pair of pairs) {
+        const trimmed = pair.trim();
+        if (!trimmed.startsWith(`${HI_HISTORY_COOKIE}=`)) continue;
+        try {
+          const raw = trimmed.slice(HI_HISTORY_COOKIE.length + 1);
+          const decoded = decodeURIComponent(raw);
+          return normalizeHistory(JSON.parse(decoded));
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+
+    function saveHiScoreToCookie(value) {
+      document.cookie = `${HI_SCORE_COOKIE}=${value}; max-age=${HI_SCORE_COOKIE_MAX_AGE}; path=/; samesite=lax`;
+    }
+
+    function saveHistoryToCookie(list) {
+      const safe = normalizeHistory(list);
+      const payload = encodeURIComponent(JSON.stringify(safe));
+      document.cookie = `${HI_HISTORY_COOKIE}=${payload}; max-age=${HI_SCORE_COOKIE_MAX_AGE}; path=/; samesite=lax`;
+    }
+
+    function updateHiScore(candidate) {
+      if (candidate <= hiScore) return;
+      hiScore = candidate;
+      saveHiScoreToCookie(hiScore);
+    }
+
+    function renderScoreHistory() {
+      if (scoreHistory.length === 0) {
+        historyListEl.innerHTML = "";
+        historyEmptyEl.style.display = "block";
+        return;
+      }
+
+      historyEmptyEl.style.display = "none";
+      historyListEl.innerHTML = scoreHistory.map((item, idx) => (
+        `<li>`
+        + `<span class="history-rank">${idx + 1}.</span>`
+        + `<span class="history-date">${item.date}</span>`
+        + `<span class="history-score">${scoreText(item.score)}</span>`
+        + `</li>`
+      )).join("");
+    }
+
+    function addScoreHistory(value) {
+      if (value <= 0) return;
+      const now = Date.now();
+      scoreHistory.push({
+        score: value,
+        date: formatDate(now),
+        ts: now
+      });
+      scoreHistory = normalizeHistory(scoreHistory);
+      saveHistoryToCookie(scoreHistory);
+      renderScoreHistory();
+    }
+
+    function random(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function resetGame() {
+      score = 0;
+      speed = 6;
+      tick = 0;
+      spawnTimer = 0;
+      obstacles.length = 0;
+      clouds.length = 0;
+      gameOverFlash = 0;
+
+      dino.y = GROUND_Y - dino.h;
+      dino.x = DINO_BASE_X;
+      dino.vy = 0;
+      dino.grounded = true;
+      dino.runFrame = 0;
+
+      for (let i = 0; i < 3; i++) {
+        clouds.push({
+          x: random(120, canvas.width),
+          y: random(35, 95),
+          w: random(34, 54),
+          h: random(11, 16),
+          speed: random(0.6, 1.1)
+        });
+      }
+    }
+
+    function startGame() {
+      if (state === "running") return;
+      if (state === "over") {
+        resetGame();
+      }
+      state = "running";
+    }
+
+    function jump() {
+      if (state === "ready") {
+        startGame();
+      }
+      if (state === "over") {
+        startGame();
+        return;
+      }
+      if (state !== "running") return;
+      if (!dino.grounded) return;
+
+      dino.vy = dino.jumpPower;
+      dino.grounded = false;
+    }
+
+    function spawnObstacle() {
+      const birdAllowed = score > 180;
+      const useBird = birdAllowed && Math.random() < 0.22;
+
+      if (useBird) {
+        const flyLevel = [GROUND_Y - 74, GROUND_Y - 104, GROUND_Y - 54];
+        const y = flyLevel[Math.floor(Math.random() * flyLevel.length)];
+        obstacles.push({
+          type: "bird",
+          x: canvas.width + 10,
+          y,
+          w: 42,
+          h: 28,
+          wing: 0
+        });
+        return;
+      }
+
+      const variant = Math.random();
+      if (variant < 0.55) {
+        obstacles.push({ type: "cactus-s", x: canvas.width + 10, y: GROUND_Y - 42, w: 19, h: 42 });
+      } else if (variant < 0.85) {
+        obstacles.push({ type: "cactus-m", x: canvas.width + 10, y: GROUND_Y - 52, w: 26, h: 52 });
+      } else {
+        obstacles.push({ type: "cactus-l", x: canvas.width + 10, y: GROUND_Y - 58, w: 36, h: 58 });
+      }
+    }
+
+    function applyHorizontalMove() {
+      if (!keys.left && !keys.right) return;
+      if (state === "over") return;
+
+      if (keys.left) {
+        dino.x -= DINO_MOVE_SPEED;
+      }
+      if (keys.right) {
+        dino.x += DINO_MOVE_SPEED;
+      }
+
+      const minX = 16;
+      const maxX = canvas.width - dino.w - 16;
+      if (dino.x < minX) dino.x = minX;
+      if (dino.x > maxX) dino.x = maxX;
+    }
+
+    function update() {
+      tick++;
+
+      clouds.forEach((c) => {
+        c.x -= c.speed;
+        if (c.x + c.w < 0) {
+          c.x = canvas.width + random(50, 200);
+          c.y = random(30, 98);
+        }
+      });
+
+      applyHorizontalMove();
+
+      if (state !== "running") {
+        return;
+      }
+
+      dino.vy += dino.gravity;
+      dino.y += dino.vy;
+
+      if (dino.y >= GROUND_Y - dino.h) {
+        dino.y = GROUND_Y - dino.h;
+        dino.vy = 0;
+        dino.grounded = true;
+      }
+
+      if (dino.grounded && tick % 8 === 0) {
+        dino.runFrame = (dino.runFrame + 1) % 2;
+      }
+
+      spawnTimer--;
+      if (spawnTimer <= 0) {
+        spawnObstacle();
+        const gap = Math.max(48, 112 - Math.floor(speed * 6));
+        spawnTimer = Math.floor(random(gap, gap + 55));
+      }
+
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const ob = obstacles[i];
+        ob.x -= speed;
+        if (ob.type === "bird") {
+          ob.wing = (ob.wing + 1) % 16;
+        }
+
+        if (ob.x + ob.w < 0) {
+          obstacles.splice(i, 1);
+          continue;
+        }
+
+        if (hitDino(ob)) {
+          state = "over";
+          gameOverFlash = 28;
+          addScoreHistory(score);
+          updateHiScore(score);
+          return;
+        }
+      }
+
+      score += 1;
+      if (score % 120 === 0) {
+        speed += 0.35;
+      }
+      updateHiScore(score);
+    }
+
+    function hitDino(ob) {
+      const pad = 5;
+      const dx = dino.x + pad;
+      const dy = dino.y + 3;
+      const dw = dino.w - pad * 2;
+      const dh = dino.h - 6;
+
+      return dx < ob.x + ob.w && dx + dw > ob.x && dy < ob.y + ob.h && dy + dh > ob.y;
+    }
+
+    function drawCloud(c) {
+      ctx.fillStyle = "#d4d4d4";
+      ctx.fillRect(c.x, c.y, c.w, c.h);
+      ctx.fillRect(c.x + 8, c.y - 5, c.w * 0.5, 5);
+      ctx.fillRect(c.x + c.w * 0.55, c.y - 3, c.w * 0.35, 3);
+    }
+
+    function drawGround() {
+      ctx.fillStyle = "#535353";
+      ctx.fillRect(0, GROUND_Y, canvas.width, 2);
+
+      for (let x = -40; x < canvas.width + 60; x += 28) {
+        const offset = (tick * speed * 0.45) % 28;
+        const px = x - offset;
+        ctx.fillRect(px, GROUND_Y + 5, 14, 2);
+      }
+    }
+
+    function drawDino() {
+      const x = Math.round(dino.x);
+      const y = Math.round(dino.y);
+      ctx.fillStyle = "#535353";
+
+      ctx.fillRect(x + 9, y + 3, 24, 14);
+      ctx.fillRect(x + 2, y + 11, 18, 14);
+      ctx.fillRect(x + 4, y + 24, 30, 15);
+      ctx.fillRect(x + 12, y + 39, 8, 8);
+      ctx.fillRect(x + 25, y + 39, 8, 8);
+      ctx.fillRect(x, y + 13, 7, 8);
+
+      if (!dino.grounded) {
+        ctx.fillRect(x + 12, y + 41, 7, 6);
+        ctx.fillRect(x + 26, y + 41, 7, 6);
+      } else if (dino.runFrame === 0) {
+        ctx.fillRect(x + 11, y + 42, 7, 5);
+        ctx.fillRect(x + 27, y + 39, 7, 8);
+      } else {
+        ctx.fillRect(x + 11, y + 39, 7, 8);
+        ctx.fillRect(x + 27, y + 42, 7, 5);
+      }
+
+      ctx.fillRect(x + 27, y + 7, 4, 4);
+      ctx.fillStyle = "#f7f7f7";
+      ctx.fillRect(x + 28, y + 8, 2, 2);
+    }
+
+    function drawCactus(ob) {
+      ctx.fillStyle = "#535353";
+      if (ob.type === "cactus-s") {
+        ctx.fillRect(ob.x + 7, ob.y, 7, ob.h);
+        ctx.fillRect(ob.x + 3, ob.y + 14, 4, 9);
+        ctx.fillRect(ob.x + 14, ob.y + 19, 4, 9);
+      } else if (ob.type === "cactus-m") {
+        ctx.fillRect(ob.x + 8, ob.y, 9, ob.h);
+        ctx.fillRect(ob.x + 2, ob.y + 16, 6, 12);
+        ctx.fillRect(ob.x + 17, ob.y + 22, 6, 11);
+      } else {
+        ctx.fillRect(ob.x + 13, ob.y, 10, ob.h);
+        ctx.fillRect(ob.x + 2, ob.y + 15, 8, 16);
+        ctx.fillRect(ob.x + 24, ob.y + 21, 8, 14);
+      }
+    }
+
+    function drawBird(ob) {
+      ctx.fillStyle = "#535353";
+      ctx.fillRect(ob.x + 12, ob.y + 10, 18, 10);
+      ctx.fillRect(ob.x + 28, ob.y + 8, 8, 6);
+
+      const wingUp = ob.wing < 8;
+      if (wingUp) {
+        ctx.fillRect(ob.x + 6, ob.y + 3, 8, 5);
+        ctx.fillRect(ob.x + 20, ob.y + 2, 8, 5);
+      } else {
+        ctx.fillRect(ob.x + 6, ob.y + 18, 8, 5);
+        ctx.fillRect(ob.x + 20, ob.y + 18, 8, 5);
+      }
+    }
+
+    function drawObstacles() {
+      obstacles.forEach((ob) => {
+        if (ob.type === "bird") {
+          drawBird(ob);
+        } else {
+          drawCactus(ob);
+        }
+      });
+    }
+
+    function scoreText(v) {
+      return String(Math.floor(v / 6)).padStart(5, "0");
+    }
+
+    function drawScore() {
+      ctx.fillStyle = "#7a7a7a";
+      ctx.font = "20px monospace";
+      ctx.textAlign = "right";
+      const cur = scoreText(score);
+      const hi = scoreText(hiScore);
+      ctx.fillText(`HI ${hi} ${cur}`, canvas.width - 18, 34);
+    }
+
+    function drawReadyHint() {
+      ctx.fillStyle = "#6a6a6a";
+      ctx.textAlign = "center";
+      ctx.font = "22px monospace";
+      ctx.fillText("PRESS SPACE TO START", canvas.width / 2, 92);
+    }
+
+    function drawGameOver() {
+      ctx.fillStyle = "#535353";
+      ctx.textAlign = "center";
+      ctx.font = "32px monospace";
+      ctx.fillText("GAME OVER", canvas.width / 2, 95);
+
+      ctx.strokeStyle = "#535353";
+      ctx.lineWidth = 3;
+      const rx = canvas.width / 2 - 15;
+      const ry = 118;
+      ctx.strokeRect(rx, ry, 30, 30);
+      ctx.beginPath();
+      ctx.moveTo(rx + 10, ry + 8);
+      ctx.lineTo(rx + 22, ry + 15);
+      ctx.lineTo(rx + 10, ry + 22);
+      ctx.closePath();
+      ctx.fillStyle = "#535353";
+      ctx.fill();
+
+      if (gameOverFlash > 0) {
+        ctx.globalAlpha = gameOverFlash % 6 < 3 ? 0.08 : 0;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.globalAlpha = 1;
+        gameOverFlash--;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      clouds.forEach(drawCloud);
+      drawGround();
+      drawObstacles();
+      drawDino();
+      drawScore();
+
+      if (state === "ready") {
+        drawReadyHint();
+      }
+      if (state === "over") {
+        drawGameOver();
+      }
+    }
+
+    function loop() {
+      update();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function onAction(e) {
+      if (e) {
+        e.preventDefault();
+      }
+      jump();
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        onAction(e);
+        return;
+      }
+      if (e.code === "ArrowLeft" || e.code === "KeyA") {
+        keys.left = true;
+        e.preventDefault();
+        return;
+      }
+      if (e.code === "ArrowRight" || e.code === "KeyD") {
+        keys.right = true;
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener("keyup", (e) => {
+      if (e.code === "ArrowLeft" || e.code === "KeyA") {
+        keys.left = false;
+        return;
+      }
+      if (e.code === "ArrowRight" || e.code === "KeyD") {
+        keys.right = false;
+      }
+    });
+
+    window.addEventListener("blur", () => {
+      keys.left = false;
+      keys.right = false;
+    });
+
+    canvas.addEventListener("mousedown", onAction);
+    canvas.addEventListener("touchstart", onAction, { passive: false });
+
+    scoreHistory = readHistoryFromCookie();
+    renderScoreHistory();
+    hiScore = Math.max(readHiScoreFromCookie(), scoreHistory.length > 0 ? scoreHistory[0].score : 0);
+    saveHiScoreToCookie(hiScore);
+    resetGame();
+    loop();
+  </script>
+</body>
+</html>

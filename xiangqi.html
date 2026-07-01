@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>中國象棋</title>
+  <style>
+    :root {
+      --bg1: #1f2a38;
+      --bg2: #2d4159;
+      --wood: #dfba82;
+      --line: #5d3b1f;
+      --red: #be2f2f;
+      --black: #1b1b1b;
+      --accent: #ffd38a;
+      --panel: rgba(255, 255, 255, 0.12);
+      --panel-border: rgba(255, 255, 255, 0.22);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: radial-gradient(circle at 20% 20%, #3d5f86 0%, var(--bg2) 38%, var(--bg1) 100%);
+      color: #f7f4ed;
+      font-family: "Noto Serif TC", "PingFang TC", "Microsoft JhengHei", serif;
+      padding: 16px;
+    }
+
+    .wrap {
+      width: min(100%, 760px);
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+    }
+
+    .title {
+      margin: 0;
+      letter-spacing: 4px;
+      font-size: clamp(24px, 4vw, 36px);
+      text-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    .panel {
+      width: min(100%, 680px);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      backdrop-filter: blur(6px);
+    }
+
+    .status {
+      font-size: 16px;
+      line-height: 1.3;
+    }
+
+    .status strong {
+      color: var(--accent);
+      margin-left: 4px;
+    }
+
+    .control {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+    }
+
+    select {
+      border: 0;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 14px;
+      background: #fce5ba;
+      color: #3a2512;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button {
+      border: 0;
+      border-radius: 9px;
+      padding: 9px 16px;
+      font-size: 15px;
+      cursor: pointer;
+      background: linear-gradient(180deg, #ffe2a9, #f1bf72);
+      color: #3a2512;
+      font-weight: 700;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+    }
+
+    button:active {
+      transform: translateY(0);
+      filter: brightness(0.95);
+    }
+
+    canvas {
+      width: 100%;
+      max-width: 680px;
+      aspect-ratio: 9 / 10;
+      border: 10px solid #704a24;
+      border-radius: 8px;
+      background: var(--wood);
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.35);
+      touch-action: manipulation;
+    }
+
+    .tips {
+      margin: 0;
+      opacity: 0.9;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .record {
+      width: min(100%, 680px);
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .recordTitle {
+      font-size: 15px;
+      color: var(--accent);
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .moveList {
+      margin: 0;
+      padding-left: 20px;
+      max-height: 180px;
+      overflow: auto;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .moveList li {
+      margin-bottom: 2px;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1 class="title">中國象棋</h1>
+
+    <div class="panel">
+      <div class="status">輪到：<strong id="turnText">紅方</strong></div>
+      <div class="status">狀態：<strong id="statusText">請落子</strong></div>
+      <label class="control">難度
+        <select id="difficultySelect" aria-label="AI 難度">
+          <option value="easy">新手</option>
+          <option value="normal" selected>普通</option>
+          <option value="hard">困難</option>
+        </select>
+      </label>
+      <button id="undoBtn" type="button">悔棋</button>
+      <button id="restartBtn" type="button">重新開始</button>
+    </div>
+
+    <canvas id="boardCanvas" width="680" height="760" aria-label="中國象棋棋盤"></canvas>
+    <section class="record" aria-label="走步記譜">
+      <div class="recordTitle">走步記譜</div>
+      <ol id="moveList" class="moveList"></ol>
+    </section>
+    <p class="tips">你執紅先行，點擊棋子再點目標位置。已內建規則判斷與電腦 AI 對弈。</p>
+  </main>
+
+  <script>
+    const ROWS = 10;
+    const COLS = 9;
+
+    const HUMAN = "red";
+    const AI = "black";
+
+    const PIECE_TEXT = {
+      red: { k: "帥", a: "仕", b: "相", n: "傌", r: "俥", c: "炮", p: "兵" },
+      black: { k: "將", a: "士", b: "象", n: "馬", r: "車", c: "砲", p: "卒" }
+    };
+
+    const PIECE_VALUE = {
+      k: 10000,
+      r: 580,
+      c: 320,
+      n: 300,
+      b: 120,
+      a: 120,
+      p: 70
+    };
+
+    const PAWN_ADVANCE_BONUS = [0, 6, 12, 18, 24, 30, 36, 44, 52, 62];
+
+    const canvas = document.getElementById("boardCanvas");
+    const ctx = canvas.getContext("2d");
+    const turnText = document.getElementById("turnText");
+    const statusText = document.getElementById("statusText");
+    const difficultySelect = document.getElementById("difficultySelect");
+    const undoBtn = document.getElementById("undoBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const moveList = document.getElementById("moveList");
+
+    const grid = {
+      x: 55,
+      y: 40,
+      cell: 70
+    };
+
+    let board = [];
+    let currentSide = HUMAN;
+    let selected = null;
+    let legalTargets = [];
+    let lastMove = null;
+    let gameOver = false;
+    let aiThinking = false;
+    let difficulty = "normal";
+    let moveLog = [];
+    let history = [];
+    let positionHistory = [];
+    let aiPreviousMove = null;
+
+    const DIFFICULTY_CONFIG = {
+      easy: { opening: 1, middle: 1, endgame: 2, jitter: 26 },
+      normal: { opening: 2, middle: 3, endgame: 4, jitter: 8 },
+      hard: { opening: 3, middle: 4, endgame: 5, jitter: 0 }
+    };
+
+    function createInitialBoard() {
+      const empty = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+      const put = (r, c, side, type) => {
+        empty[r][c] = { side, type };
+      };
+
+      put(0, 0, AI, "r"); put(0, 1, AI, "n"); put(0, 2, AI, "b"); put(0, 3, AI, "a");
+      put(0, 4, AI, "k"); put(0, 5, AI, "a"); put(0, 6, AI, "b"); put(0, 7, AI, "n"); put(0, 8, AI, "r");
+      put(2, 1, AI, "c"); put(2, 7, AI, "c");
+      put(3, 0, AI, "p"); put(3, 2, AI, "p"); put(3, 4, AI, "p"); put(3, 6, AI, "p"); put(3, 8, AI, "p");
+
+      put(9, 0, HUMAN, "r"); put(9, 1, HUMAN, "n"); put(9, 2, HUMAN, "b"); put(9, 3, HUMAN, "a");
+      put(9, 4, HUMAN, "k"); put(9, 5, HUMAN, "a"); put(9, 6, HUMAN, "b"); put(9, 7, HUMAN, "n"); put(9, 8, HUMAN, "r");
+      put(7, 1, HUMAN, "c"); put(7, 7, HUMAN, "c");
+      put(6, 0, HUMAN, "p"); put(6, 2, HUMAN, "p"); put(6, 4, HUMAN, "p"); put(6, 6, HUMAN, "p"); put(6, 8, HUMAN, "p");
+
+      return empty;
+    }
+
+    function resetGame() {
+      board = createInitialBoard();
+      currentSide = HUMAN;
+      selected = null;
+      legalTargets = [];
+      lastMove = null;
+      gameOver = false;
+      aiThinking = false;
+      moveLog = [];
+      history = [];
+      positionHistory = [boardSignature(board, currentSide)];
+      aiPreviousMove = null;
+      setStatus("請落子");
+      updateTurnText();
+      updateMoveList();
+      draw();
+    }
+
+    function updateTurnText() {
+      turnText.textContent = currentSide === HUMAN ? "紅方" : "黑方";
+    }
+
+    function setStatus(text) {
+      statusText.textContent = text;
+    }
+
+    function updateMoveList() {
+      moveList.innerHTML = moveLog.map((line) => `<li>${line}</li>`).join("");
+      moveList.scrollTop = moveList.scrollHeight;
+    }
+
+    function toPointLabel(r, c) {
+      return `${r + 1},${c + 1}`;
+    }
+
+    function formatMoveText(side, piece, move, captured) {
+      const sideText = side === HUMAN ? "紅" : "黑";
+      const pieceText = PIECE_TEXT[side][piece.type];
+      const from = toPointLabel(move.fromR, move.fromC);
+      const to = toPointLabel(move.toR, move.toC);
+      const mark = captured ? "x" : "-";
+      return `${sideText}${pieceText} ${from}${mark}${to}`;
+    }
+
+    function boardSignature(srcBoard, sideToMove) {
+      let sig = "";
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = srcBoard[r][c];
+          sig += p ? `${p.side[0]}${p.type}` : "..";
+        }
+      }
+      return `${sig}|${sideToMove}`;
+    }
+
+    function countSignature(signature) {
+      let count = 0;
+      for (const s of positionHistory) {
+        if (s === signature) count++;
+      }
+      return count;
+    }
+
+    function isThreefoldRepetition() {
+      if (positionHistory.length === 0) return false;
+      const latest = positionHistory[positionHistory.length - 1];
+      return countSignature(latest) >= 3;
+    }
+
+    function isReverseMove(currentMove, previousMove) {
+      if (!previousMove) return false;
+      return currentMove.fromR === previousMove.toR
+        && currentMove.fromC === previousMove.toC
+        && currentMove.toR === previousMove.fromR
+        && currentMove.toC === previousMove.fromC;
+    }
+
+    function pushHistory() {
+      history.push({
+        board: cloneBoard(board),
+        currentSide,
+        lastMove: lastMove ? { ...lastMove } : null,
+        gameOver,
+        moveLog: [...moveLog],
+        positionHistory: [...positionHistory],
+        aiPreviousMove: aiPreviousMove ? { ...aiPreviousMove } : null,
+        status: statusText.textContent
+      });
+    }
+
+    function restoreState(snapshot) {
+      board = cloneBoard(snapshot.board);
+      currentSide = snapshot.currentSide;
+      lastMove = snapshot.lastMove ? { ...snapshot.lastMove } : null;
+      gameOver = snapshot.gameOver;
+      moveLog = [...snapshot.moveLog];
+      positionHistory = [...snapshot.positionHistory];
+      aiPreviousMove = snapshot.aiPreviousMove ? { ...snapshot.aiPreviousMove } : null;
+      selected = null;
+      legalTargets = [];
+      aiThinking = false;
+      setStatus(snapshot.status || "請落子");
+      updateTurnText();
+      updateMoveList();
+      draw();
+    }
+
+    function undoMoves(steps) {
+      if (aiThinking || history.length === 0) return;
+      let snapshot = null;
+      for (let i = 0; i < steps && history.length > 0; i++) {
+        snapshot = history.pop();
+      }
+      if (!snapshot) return;
+      restoreState(snapshot);
+    }
+
+    function draw() {
+      drawBoard();
+      drawHighlights();
+      drawPieces();
+    }
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const left = grid.x;
+      const top = grid.y;
+      const cell = grid.cell;
+      const right = left + (COLS - 1) * cell;
+      const bottom = top + (ROWS - 1) * cell;
+
+      ctx.fillStyle = "#dfba82";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = "#5d3b1f";
+      ctx.lineWidth = 2;
+
+      for (let c = 0; c < COLS; c++) {
+        const x = left + c * cell;
+        ctx.beginPath();
+        ctx.moveTo(x, top);
+        ctx.lineTo(x, top + 4 * cell);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(x, top + 5 * cell);
+        ctx.lineTo(x, bottom);
+        ctx.stroke();
+      }
+
+      for (let r = 0; r < ROWS; r++) {
+        const y = top + r * cell;
+        ctx.beginPath();
+        ctx.moveTo(left, y);
+        ctx.lineTo(right, y);
+        ctx.stroke();
+      }
+
+      ctx.strokeRect(left, top, (COLS - 1) * cell, (ROWS - 1) * cell);
+
+      drawPalace(0, 4);
+      drawPalace(7, 9);
+
+      ctx.save();
+      ctx.fillStyle = "rgba(93, 59, 31, 0.8)";
+      ctx.font = "700 42px Noto Serif TC, PingFang TC, serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("楚 河", left + cell * 2, top + cell * 4.5);
+      ctx.fillText("漢 界", left + cell * 6, top + cell * 4.5);
+      ctx.restore();
+
+      drawMarks();
+    }
+
+    function drawPalace(startRow, endRow) {
+      const left = grid.x + 3 * grid.cell;
+      const right = grid.x + 5 * grid.cell;
+      const top = grid.y + startRow * grid.cell;
+      const bottom = grid.y + endRow * grid.cell;
+
+      ctx.beginPath();
+      ctx.moveTo(left, top);
+      ctx.lineTo(right, bottom);
+      ctx.moveTo(right, top);
+      ctx.lineTo(left, bottom);
+      ctx.stroke();
+    }
+
+    function drawMarks() {
+      const marks = [
+        [2, 1], [2, 7], [7, 1], [7, 7],
+        [3, 0], [3, 2], [3, 4], [3, 6], [3, 8],
+        [6, 0], [6, 2], [6, 4], [6, 6], [6, 8]
+      ];
+      marks.forEach(([r, c]) => drawCrossMark(r, c));
+    }
+
+    function drawCrossMark(r, c) {
+      const x = grid.x + c * grid.cell;
+      const y = grid.y + r * grid.cell;
+      const d = 10;
+      const g = 4;
+
+      ctx.save();
+      ctx.strokeStyle = "#5d3b1f";
+      ctx.lineWidth = 1.7;
+
+      const drawCorner = (sx, sy, dx, dy) => {
+        ctx.beginPath();
+        ctx.moveTo(sx, sy + dy * g);
+        ctx.lineTo(sx, sy);
+        ctx.lineTo(sx + dx * d, sy);
+        ctx.stroke();
+      };
+
+      if (c > 0) {
+        drawCorner(x - g, y - g, -1, -1);
+        drawCorner(x - g, y + g, -1, 1);
+      }
+      if (c < COLS - 1) {
+        drawCorner(x + g, y - g, 1, -1);
+        drawCorner(x + g, y + g, 1, 1);
+      }
+
+      ctx.restore();
+    }
+
+    function drawHighlights() {
+      if (lastMove) {
+        drawCellFrame(lastMove.fromR, lastMove.fromC, "rgba(0, 120, 255, 0.45)");
+        drawCellFrame(lastMove.toR, lastMove.toC, "rgba(0, 120, 255, 0.65)");
+      }
+
+      if (selected) {
+        drawCellFrame(selected.r, selected.c, "rgba(255, 196, 0, 0.95)");
+      }
+
+      legalTargets.forEach((m) => {
+        const x = grid.x + m.toC * grid.cell;
+        const y = grid.y + m.toR * grid.cell;
+        ctx.save();
+        ctx.beginPath();
+        ctx.fillStyle = m.capture ? "rgba(235, 60, 60, 0.65)" : "rgba(60, 140, 235, 0.5)";
+        ctx.arc(x, y, m.capture ? 12 : 9, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    function drawCellFrame(r, c, color) {
+      const x = grid.x + c * grid.cell;
+      const y = grid.y + r * grid.cell;
+      const half = 28;
+
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 4;
+      ctx.strokeRect(x - half, y - half, half * 2, half * 2);
+      ctx.restore();
+    }
+
+    function drawPieces() {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = board[r][c];
+          if (!p) continue;
+          drawPieceAt(r, c, p);
+        }
+      }
+    }
+
+    function drawPieceAt(r, c, piece) {
+      const x = grid.x + c * grid.cell;
+      const y = grid.y + r * grid.cell;
+      const radius = 27;
+
+      ctx.save();
+
+      const grad = ctx.createRadialGradient(x - 7, y - 8, 4, x, y, radius);
+      grad.addColorStop(0, "#fff6dc");
+      grad.addColorStop(1, "#ead3ad");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = piece.side === HUMAN ? "#af2b2b" : "#252525";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.fillStyle = piece.side === HUMAN ? "#b42626" : "#1f1f1f";
+      ctx.font = "700 33px Noto Serif TC, PingFang TC, serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(PIECE_TEXT[piece.side][piece.type], x, y + 1);
+
+      ctx.restore();
+    }
+
+    function getCoordFromEvent(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const px = (e.clientX - rect.left) * scaleX;
+      const py = (e.clientY - rect.top) * scaleY;
+
+      const c = Math.round((px - grid.x) / grid.cell);
+      const r = Math.round((py - grid.y) / grid.cell);
+
+      if (!inBoard(r, c)) return null;
+
+      const x = grid.x + c * grid.cell;
+      const y = grid.y + r * grid.cell;
+      const dist = Math.hypot(px - x, py - y);
+      if (dist > 30) return null;
+
+      return { r, c };
+    }
+
+    function inBoard(r, c) {
+      return r >= 0 && r < ROWS && c >= 0 && c < COLS;
+    }
+
+    function inPalace(side, r, c) {
+      if (c < 3 || c > 5) return false;
+      return side === HUMAN ? r >= 7 && r <= 9 : r >= 0 && r <= 2;
+    }
+
+    function opposite(side) {
+      return side === HUMAN ? AI : HUMAN;
+    }
+
+    function cloneBoard(src) {
+      return src.map((row) => row.map((p) => (p ? { side: p.side, type: p.type } : null)));
+    }
+
+    function isAcrossRiver(side, row) {
+      return side === HUMAN ? row <= 4 : row >= 5;
+    }
+
+    function addStepMove(moves, srcBoard, piece, fromR, fromC, toR, toC) {
+      if (!inBoard(toR, toC)) return;
+      const t = srcBoard[toR][toC];
+      if (!t || t.side !== piece.side) {
+        moves.push({ fromR, fromC, toR, toC, capture: Boolean(t) });
+      }
+    }
+
+    function generatePseudoMoves(srcBoard, r, c, piece) {
+      const moves = [];
+      const side = piece.side;
+
+      if (piece.type === "k") {
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        dirs.forEach(([dr, dc]) => {
+          const nr = r + dr;
+          const nc = c + dc;
+          if (inPalace(side, nr, nc)) {
+            addStepMove(moves, srcBoard, piece, r, c, nr, nc);
+          }
+        });
+      }
+
+      if (piece.type === "a") {
+        const dirs = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+        dirs.forEach(([dr, dc]) => {
+          const nr = r + dr;
+          const nc = c + dc;
+          if (inPalace(side, nr, nc)) {
+            addStepMove(moves, srcBoard, piece, r, c, nr, nc);
+          }
+        });
+      }
+
+      if (piece.type === "b") {
+        const dirs = [[2, 2], [2, -2], [-2, 2], [-2, -2]];
+        dirs.forEach(([dr, dc]) => {
+          const nr = r + dr;
+          const nc = c + dc;
+          const mr = r + dr / 2;
+          const mc = c + dc / 2;
+          if (!inBoard(nr, nc)) return;
+          if (side === HUMAN && nr < 5) return;
+          if (side === AI && nr > 4) return;
+          if (srcBoard[mr][mc]) return;
+          addStepMove(moves, srcBoard, piece, r, c, nr, nc);
+        });
+      }
+
+      if (piece.type === "n") {
+        const horseSteps = [
+          { leg: [-1, 0], to: [-2, -1] }, { leg: [-1, 0], to: [-2, 1] },
+          { leg: [1, 0], to: [2, -1] }, { leg: [1, 0], to: [2, 1] },
+          { leg: [0, -1], to: [-1, -2] }, { leg: [0, -1], to: [1, -2] },
+          { leg: [0, 1], to: [-1, 2] }, { leg: [0, 1], to: [1, 2] }
+        ];
+        horseSteps.forEach((s) => {
+          const lr = r + s.leg[0];
+          const lc = c + s.leg[1];
+          if (!inBoard(lr, lc) || srcBoard[lr][lc]) return;
+          const nr = r + s.to[0];
+          const nc = c + s.to[1];
+          addStepMove(moves, srcBoard, piece, r, c, nr, nc);
+        });
+      }
+
+      if (piece.type === "r") {
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        dirs.forEach(([dr, dc]) => {
+          let nr = r + dr;
+          let nc = c + dc;
+          while (inBoard(nr, nc)) {
+            const t = srcBoard[nr][nc];
+            if (!t) {
+              moves.push({ fromR: r, fromC: c, toR: nr, toC: nc, capture: false });
+            } else {
+              if (t.side !== side) {
+                moves.push({ fromR: r, fromC: c, toR: nr, toC: nc, capture: true });
+              }
+              break;
+            }
+            nr += dr;
+            nc += dc;
+          }
+        });
+      }
+
+      if (piece.type === "c") {
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        dirs.forEach(([dr, dc]) => {
+          let nr = r + dr;
+          let nc = c + dc;
+          let jumped = false;
+          while (inBoard(nr, nc)) {
+            const t = srcBoard[nr][nc];
+            if (!jumped) {
+              if (!t) {
+                moves.push({ fromR: r, fromC: c, toR: nr, toC: nc, capture: false });
+              } else {
+                jumped = true;
+              }
+            } else if (t) {
+              if (t.side !== side) {
+                moves.push({ fromR: r, fromC: c, toR: nr, toC: nc, capture: true });
+              }
+              break;
+            }
+            nr += dr;
+            nc += dc;
+          }
+        });
+      }
+
+      if (piece.type === "p") {
+        const forward = side === HUMAN ? -1 : 1;
+        addStepMove(moves, srcBoard, piece, r, c, r + forward, c);
+        if (isAcrossRiver(side, r)) {
+          addStepMove(moves, srcBoard, piece, r, c, r, c - 1);
+          addStepMove(moves, srcBoard, piece, r, c, r, c + 1);
+        }
+      }
+
+      return moves;
+    }
+
+    function kingsFacing(srcBoard) {
+      let redKing = null;
+      let blackKing = null;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = srcBoard[r][c];
+          if (!p || p.type !== "k") continue;
+          if (p.side === HUMAN) redKing = { r, c };
+          else blackKing = { r, c };
+        }
+      }
+      if (!redKing || !blackKing) return false;
+      if (redKing.c !== blackKing.c) return false;
+
+      for (let r = blackKing.r + 1; r < redKing.r; r++) {
+        if (srcBoard[r][redKing.c]) return false;
+      }
+      return true;
+    }
+
+    function locateKing(srcBoard, side) {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = srcBoard[r][c];
+          if (p && p.side === side && p.type === "k") {
+            return { r, c };
+          }
+        }
+      }
+      return null;
+    }
+
+    function rookLikeAttack(srcBoard, fromR, fromC, toR, toC) {
+      if (fromR !== toR && fromC !== toC) return false;
+      const dr = Math.sign(toR - fromR);
+      const dc = Math.sign(toC - fromC);
+      let r = fromR + dr;
+      let c = fromC + dc;
+      while (r !== toR || c !== toC) {
+        if (srcBoard[r][c]) return false;
+        r += dr;
+        c += dc;
+      }
+      return true;
+    }
+
+    function cannonAttack(srcBoard, fromR, fromC, toR, toC) {
+      if (fromR !== toR && fromC !== toC) return false;
+      const dr = Math.sign(toR - fromR);
+      const dc = Math.sign(toC - fromC);
+      let r = fromR + dr;
+      let c = fromC + dc;
+      let count = 0;
+      while (r !== toR || c !== toC) {
+        if (srcBoard[r][c]) count++;
+        r += dr;
+        c += dc;
+      }
+      return count === 1;
+    }
+
+    function horseAttack(srcBoard, fromR, fromC, toR, toC) {
+      const dr = toR - fromR;
+      const dc = toC - fromC;
+      const absR = Math.abs(dr);
+      const absC = Math.abs(dc);
+      if (!((absR === 2 && absC === 1) || (absR === 1 && absC === 2))) return false;
+
+      if (absR === 2) {
+        const legR = fromR + dr / 2;
+        return !srcBoard[legR][fromC];
+      }
+
+      const legC = fromC + dc / 2;
+      return !srcBoard[fromR][legC];
+    }
+
+    function isSquareAttacked(srcBoard, targetR, targetC, bySide) {
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = srcBoard[r][c];
+          if (!p || p.side !== bySide) continue;
+
+          if (p.type === "k") {
+            if (Math.abs(r - targetR) + Math.abs(c - targetC) === 1 && inPalace(bySide, targetR, targetC)) {
+              return true;
+            }
+            if (c === targetC) {
+              let blocked = false;
+              const step = targetR > r ? 1 : -1;
+              for (let rr = r + step; rr !== targetR; rr += step) {
+                if (srcBoard[rr][c]) {
+                  blocked = true;
+                  break;
+                }
+              }
+              if (!blocked) return true;
+            }
+          }
+
+          if (p.type === "a") {
+            if (Math.abs(r - targetR) === 1 && Math.abs(c - targetC) === 1 && inPalace(bySide, targetR, targetC)) {
+              return true;
+            }
+          }
+
+          if (p.type === "b") {
+            if (Math.abs(r - targetR) === 2 && Math.abs(c - targetC) === 2) {
+              if (bySide === HUMAN && targetR >= 5) {
+                const mr = (r + targetR) / 2;
+                const mc = (c + targetC) / 2;
+                if (!srcBoard[mr][mc]) return true;
+              }
+              if (bySide === AI && targetR <= 4) {
+                const mr = (r + targetR) / 2;
+                const mc = (c + targetC) / 2;
+                if (!srcBoard[mr][mc]) return true;
+              }
+            }
+          }
+
+          if (p.type === "n" && horseAttack(srcBoard, r, c, targetR, targetC)) {
+            return true;
+          }
+
+          if (p.type === "r" && rookLikeAttack(srcBoard, r, c, targetR, targetC)) {
+            return true;
+          }
+
+          if (p.type === "c" && cannonAttack(srcBoard, r, c, targetR, targetC)) {
+            return true;
+          }
+
+          if (p.type === "p") {
+            const forward = bySide === HUMAN ? -1 : 1;
+            if (targetR === r + forward && targetC === c) return true;
+            if (isAcrossRiver(bySide, r) && targetR === r && Math.abs(targetC - c) === 1) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function isInCheck(srcBoard, side) {
+      const kingPos = locateKing(srcBoard, side);
+      if (!kingPos) return true;
+      if (kingsFacing(srcBoard)) return true;
+      return isSquareAttacked(srcBoard, kingPos.r, kingPos.c, opposite(side));
+    }
+
+    function applyMove(srcBoard, move) {
+      const next = cloneBoard(srcBoard);
+      next[move.toR][move.toC] = next[move.fromR][move.fromC];
+      next[move.fromR][move.fromC] = null;
+      return next;
+    }
+
+    function generateLegalMoves(srcBoard, side) {
+      const result = [];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = srcBoard[r][c];
+          if (!p || p.side !== side) continue;
+          const pseudo = generatePseudoMoves(srcBoard, r, c, p);
+          pseudo.forEach((m) => {
+            const next = applyMove(srcBoard, m);
+            if (!isInCheck(next, side)) {
+              result.push(m);
+            }
+          });
+        }
+      }
+      return result;
+    }
+
+    function makeMove(move) {
+      pushHistory();
+      const movingPiece = board[move.fromR][move.fromC];
+      const captured = board[move.toR][move.toC];
+
+      board = applyMove(board, move);
+      lastMove = { ...move };
+      selected = null;
+      legalTargets = [];
+
+      if (movingPiece) {
+        moveLog.push(formatMoveText(movingPiece.side, movingPiece, move, Boolean(captured)));
+        updateMoveList();
+        if (movingPiece.side === AI) {
+          aiPreviousMove = { ...move };
+        }
+      }
+
+      currentSide = opposite(currentSide);
+      positionHistory.push(boardSignature(board, currentSide));
+      updateTurnText();
+      draw();
+      checkEndOrContinue();
+    }
+
+    function checkEndOrContinue() {
+      if (isThreefoldRepetition()) {
+        gameOver = true;
+        setStatus("和局（三次重複局面）");
+        draw();
+        return;
+      }
+
+      const legal = generateLegalMoves(board, currentSide);
+      if (legal.length === 0) {
+        gameOver = true;
+        const loseSide = currentSide;
+        if (isInCheck(board, loseSide)) {
+          const winner = opposite(loseSide) === HUMAN ? "你獲勝" : "電腦獲勝";
+          setStatus(`將死，${winner}`);
+        } else {
+          setStatus("和局（無合法著法）");
+        }
+        draw();
+        return;
+      }
+
+      if (currentSide === AI) {
+        runAiTurn();
+      } else {
+        setStatus("請落子");
+      }
+    }
+
+    function evaluateBoard(srcBoard, aiSide) {
+      let score = 0;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const p = srcBoard[r][c];
+          if (!p) continue;
+          let v = PIECE_VALUE[p.type];
+
+          if (p.type === "p") {
+            const advanceIndex = p.side === HUMAN ? 9 - r : r;
+            v += PAWN_ADVANCE_BONUS[advanceIndex];
+            if (isAcrossRiver(p.side, r)) v += 18;
+          }
+
+          if (p.type === "k") {
+            v += inPalace(p.side, r, c) ? 60 : -150;
+          }
+
+          if (p.side === aiSide) score += v;
+          else score -= v;
+        }
+      }
+
+      const aiMobility = generateLegalMoves(srcBoard, aiSide).length;
+      const humanMobility = generateLegalMoves(srcBoard, opposite(aiSide)).length;
+      score += (aiMobility - humanMobility) * 2;
+      return score;
+    }
+
+    function orderMoves(srcBoard, moves) {
+      moves.sort((m1, m2) => {
+        const t1 = srcBoard[m1.toR][m1.toC];
+        const t2 = srcBoard[m2.toR][m2.toC];
+        const v1 = t1 ? PIECE_VALUE[t1.type] : 0;
+        const v2 = t2 ? PIECE_VALUE[t2.type] : 0;
+        return v2 - v1;
+      });
+      return moves;
+    }
+
+    function negamax(srcBoard, side, depth, alpha, beta, aiSide, ply) {
+      const legal = generateLegalMoves(srcBoard, side);
+      if (legal.length === 0) {
+        if (isInCheck(srcBoard, side)) return -999999 + ply;
+        return 0;
+      }
+
+      if (depth === 0) {
+        return (side === aiSide ? 1 : -1) * evaluateBoard(srcBoard, aiSide);
+      }
+
+      let best = -Infinity;
+      orderMoves(srcBoard, legal);
+
+      for (const m of legal) {
+        const next = applyMove(srcBoard, m);
+        const score = -negamax(next, opposite(side), depth - 1, -beta, -alpha, aiSide, ply + 1);
+        if (score > best) best = score;
+        if (best > alpha) alpha = best;
+        if (alpha >= beta) break;
+      }
+
+      return best;
+    }
+
+    function pickAiDepth(srcBoard) {
+      let count = 0;
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          if (srcBoard[r][c]) count++;
+        }
+      }
+      const cfg = DIFFICULTY_CONFIG[difficulty] || DIFFICULTY_CONFIG.normal;
+      if (count <= 12) return cfg.endgame;
+      if (count <= 20) return cfg.middle;
+      return cfg.opening;
+    }
+
+    function searchBestMove(srcBoard, side, depth) {
+      const legal = orderMoves(srcBoard, generateLegalMoves(srcBoard, side));
+      const cfg = DIFFICULTY_CONFIG[difficulty] || DIFFICULTY_CONFIG.normal;
+      let bestMove = null;
+      let bestScore = -Infinity;
+      let alpha = -Infinity;
+      const beta = Infinity;
+
+      for (const m of legal) {
+        const next = applyMove(srcBoard, m);
+        const baseScore = -negamax(next, opposite(side), depth - 1, -beta, -alpha, side, 1);
+        const nextSignature = boardSignature(next, opposite(side));
+        const repetitionCount = countSignature(nextSignature);
+
+        let repeatPenalty = 0;
+        if (repetitionCount >= 2) repeatPenalty += 320;
+        else if (repetitionCount === 1) repeatPenalty += 65;
+        if (isReverseMove(m, aiPreviousMove)) repeatPenalty += 95;
+
+        const score = baseScore + (Math.random() * 2 - 1) * cfg.jitter - repeatPenalty;
+        if (score > bestScore) {
+          bestScore = score;
+          bestMove = m;
+        }
+        if (bestScore > alpha) alpha = bestScore;
+      }
+
+      return bestMove;
+    }
+
+    function runAiTurn() {
+      if (gameOver || aiThinking) return;
+      aiThinking = true;
+      setStatus("電腦思考中...");
+
+      window.setTimeout(() => {
+        if (gameOver) {
+          aiThinking = false;
+          return;
+        }
+        const depth = pickAiDepth(board);
+        const move = searchBestMove(board, AI, depth);
+        aiThinking = false;
+        if (!move) {
+          setStatus("和局（AI 無合法著法）");
+          gameOver = true;
+          return;
+        }
+        makeMove(move);
+      }, 70);
+    }
+
+    canvas.addEventListener("click", (e) => {
+      if (gameOver || aiThinking || currentSide !== HUMAN) return;
+      const pos = getCoordFromEvent(e);
+      if (!pos) return;
+
+      const piece = board[pos.r][pos.c];
+
+      if (selected) {
+        const candidate = legalTargets.find((m) => m.toR === pos.r && m.toC === pos.c);
+        if (candidate) {
+          makeMove(candidate);
+          return;
+        }
+      }
+
+      if (piece && piece.side === HUMAN) {
+        selected = { r: pos.r, c: pos.c };
+        const allMoves = generateLegalMoves(board, HUMAN);
+        legalTargets = allMoves.filter((m) => m.fromR === pos.r && m.fromC === pos.c);
+        setStatus(legalTargets.length > 0 ? "已選取棋子" : "此棋子目前無合法步");
+      } else {
+        selected = null;
+        legalTargets = [];
+      }
+
+      draw();
+    });
+
+    restartBtn.addEventListener("click", () => {
+      resetGame();
+    });
+
+    undoBtn.addEventListener("click", () => {
+      if (history.length === 0) return;
+      if (currentSide === HUMAN && history.length >= 2) {
+        undoMoves(2);
+      } else {
+        undoMoves(1);
+      }
+      setStatus("已悔棋");
+    });
+
+    difficultySelect.addEventListener("change", () => {
+      difficulty = difficultySelect.value;
+      if (!aiThinking && !gameOver) {
+        setStatus(`難度已切換：${difficultySelect.options[difficultySelect.selectedIndex].text}`);
+      }
+    });
+
+    resetGame();
+  </script>
+</body>
+</html>

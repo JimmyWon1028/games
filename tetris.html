@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>俄罗斯方块 豪华版</title>
+  <style>
+    :root {
+      --bg-1: #09111f;
+      --bg-2: #12263f;
+      --panel: rgba(17, 28, 45, 0.78);
+      --panel-border: rgba(130, 176, 255, 0.32);
+      --text-main: #edf4ff;
+      --text-sub: #9eb9df;
+      --accent: #4ec9ff;
+      --accent-2: #3ef3c4;
+      --danger: #ff7a9e;
+      --board-bg: #040811;
+      --block-empty: #0a1424;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text-main);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 20% 20%, #22466f 0%, transparent 36%),
+        radial-gradient(circle at 80% 10%, #2a3968 0%, transparent 34%),
+        radial-gradient(circle at 50% 100%, #1f3152 0%, transparent 40%),
+        linear-gradient(145deg, var(--bg-1), var(--bg-2));
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .app {
+      width: min(1020px, 100%);
+      display: grid;
+      gap: 16px;
+      grid-template-columns: 210px minmax(240px, 320px) 250px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+      padding: 14px;
+    }
+
+    .title {
+      font-size: 1.45rem;
+      margin: 0 0 8px;
+      letter-spacing: 0.6px;
+    }
+
+    .subtitle {
+      color: var(--text-sub);
+      font-size: 0.92rem;
+      margin: 0;
+      line-height: 1.5;
+    }
+
+    .stats {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 10px;
+      background: rgba(8, 18, 33, 0.7);
+      border-radius: 10px;
+      border: 1px solid rgba(120, 167, 255, 0.2);
+      font-size: 0.95rem;
+    }
+
+    .main-board {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 14px;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: min(100%, 300px);
+      height: auto;
+      border: 2px solid rgba(145, 195, 255, 0.55);
+      border-radius: 14px;
+      background: var(--board-bg);
+      box-shadow: inset 0 0 16px rgba(32, 88, 156, 0.5), 0 15px 30px rgba(0, 0, 0, 0.45);
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 14px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      pointer-events: none;
+      background: rgba(4, 10, 18, 0.7);
+      opacity: 0;
+      transform: scale(0.98);
+      transition: opacity 220ms ease, transform 220ms ease;
+    }
+
+    .overlay.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .overlay p {
+      margin: 0;
+      line-height: 1.7;
+      color: #e8f3ff;
+    }
+
+    .mini-wrap {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .mini-card {
+      background: rgba(8, 18, 33, 0.7);
+      border: 1px solid rgba(120, 167, 255, 0.2);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .mini-title {
+      margin: 0 0 8px;
+      color: var(--text-sub);
+      font-size: 0.82rem;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    .mini-list {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .mini-canvas {
+      width: 100%;
+      height: auto;
+      border-radius: 8px;
+      background: #050d1b;
+      border: 1px solid rgba(118, 163, 247, 0.2);
+      display: block;
+    }
+
+    .actions {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    button {
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      color: #f8fcff;
+      transition: transform 140ms ease, filter 140ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.07);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    #startButton { background: linear-gradient(135deg, #1ea4ff, #2ed6d0); }
+    #pauseButton { background: linear-gradient(135deg, #5d7cff, #7aa1ff); }
+    #soundButton { background: linear-gradient(135deg, #6f8daa, #87a9c8); }
+
+    .controls {
+      margin-top: 8px;
+      color: var(--text-sub);
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+
+    .touch-controls {
+      grid-column: 1 / -1;
+      display: none;
+      grid-template-columns: repeat(4, minmax(58px, 1fr));
+      gap: 8px;
+    }
+
+    .touch-btn {
+      min-height: 46px;
+      background: rgba(19, 39, 66, 0.9);
+      border: 1px solid rgba(140, 183, 255, 0.35);
+      color: #f1f7ff;
+      font-weight: 700;
+      border-radius: 10px;
+    }
+
+    @media (max-width: 980px) {
+      .app {
+        grid-template-columns: minmax(250px, 320px) minmax(230px, 1fr);
+      }
+      .left {
+        grid-column: 1 / -1;
+      }
+    }
+
+    @media (max-width: 700px) {
+      body {
+        padding: 14px;
+      }
+      .app {
+        grid-template-columns: 1fr;
+      }
+      .touch-controls {
+        display: grid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="panel left">
+      <h1 class="title">俄罗斯方块 · 豪华版</h1>
+      <p class="subtitle">加入了保留方块、幽灵落点、连击、预览队列、暂停与移动端按键。</p>
+      <div class="stats">
+        <div class="stat"><span>分数</span><strong id="score">0</strong></div>
+        <div class="stat"><span>等级</span><strong id="level">1</strong></div>
+        <div class="stat"><span>消行</span><strong id="lines">0</strong></div>
+        <div class="stat"><span>连击</span><strong id="combo">0</strong></div>
+      </div>
+    </section>
+
+    <section class="panel main-board">
+      <canvas id="gameCanvas" width="260" height="520" aria-label="俄罗斯方块主画布"></canvas>
+      <div class="overlay show" id="overlay">
+        <p id="overlayText">按“开始游戏”进入豪华模式</p>
+      </div>
+    </section>
+
+    <section class="panel right">
+      <div class="mini-wrap">
+        <div class="mini-card">
+          <h2 class="mini-title">保留区（C）</h2>
+          <canvas id="holdCanvas" class="mini-canvas" width="120" height="80"></canvas>
+        </div>
+        <div class="mini-card">
+          <h2 class="mini-title">下一个</h2>
+          <div class="mini-list">
+            <canvas id="next0" class="mini-canvas" width="76" height="56"></canvas>
+            <canvas id="next1" class="mini-canvas" width="76" height="56"></canvas>
+            <canvas id="next2" class="mini-canvas" width="76" height="56"></canvas>
+            <canvas id="next3" class="mini-canvas" width="76" height="56"></canvas>
+            <canvas id="next4" class="mini-canvas" width="76" height="56"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="startButton">开始游戏</button>
+        <button id="pauseButton">暂停</button>
+        <button id="soundButton">音效：开</button>
+      </div>
+      <div class="controls">
+        ← / → 移动 ↓ 软降<br>
+        ↑ 旋转 Z 反向旋转<br>
+        空格 硬降 C 保留 P 暂停
+      </div>
+    </section>
+
+    <section class="touch-controls">
+      <button class="touch-btn" data-action="left">←</button>
+      <button class="touch-btn" data-action="right">→</button>
+      <button class="touch-btn" data-action="rotate">旋转</button>
+      <button class="touch-btn" data-action="hardDrop">硬降</button>
+      <button class="touch-btn" data-action="down">↓</button>
+      <button class="touch-btn" data-action="hold">保留</button>
+      <button class="touch-btn" data-action="pause">暂停</button>
+      <button class="touch-btn" data-action="restart">重开</button>
+    </section>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const overlay = document.getElementById("overlay");
+    const overlayText = document.getElementById("overlayText");
+
+    const scoreEl = document.getElementById("score");
+    const levelEl = document.getElementById("level");
+    const linesEl = document.getElementById("lines");
+    const comboEl = document.getElementById("combo");
+
+    const startButton = document.getElementById("startButton");
+    const pauseButton = document.getElementById("pauseButton");
+    const soundButton = document.getElementById("soundButton");
+
+    const holdCanvas = document.getElementById("holdCanvas");
+    const holdCtx = holdCanvas.getContext("2d");
+    const nextCanvases = [0, 1, 2, 3, 4].map((n) => document.getElementById(`next${n}`));
+    const nextCtx = nextCanvases.map((c) => c.getContext("2d"));
+
+    const COLS = 10;
+    const ROWS = 20;
+    const BLOCK = 26;
+    const EMPTY = 0;
+
+    const PIECES = {
+      I: [[1, 1, 1, 1]],
+      O: [[1, 1], [1, 1]],
+      T: [[0, 1, 0], [1, 1, 1]],
+      S: [[0, 1, 1], [1, 1, 0]],
+      Z: [[1, 1, 0], [0, 1, 1]],
+      J: [[1, 0, 0], [1, 1, 1]],
+      L: [[0, 0, 1], [1, 1, 1]]
+    };
+
+    const COLORS = {
+      I: "#5DEBFF",
+      O: "#FFE66A",
+      T: "#B274FF",
+      S: "#4EE58D",
+      Z: "#FF6E8A",
+      J: "#72A2FF",
+      L: "#FFB36E"
+    };
+
+    const board = createBoard();
+    let bag = [];
+    let queue = [];
+    let active = null;
+    let hold = null;
+    let holdUsed = false;
+
+    let score = 0;
+    let level = 1;
+    let totalLines = 0;
+    let combo = 0;
+    let backToBack = false;
+
+    let running = false;
+    let paused = false;
+    let gameOver = false;
+    let dropCounter = 0;
+    let dropInterval = 800;
+    let lastTime = 0;
+
+    let clearFlashRows = [];
+    let clearFlashUntil = 0;
+
+    let audioCtx = null;
+    let soundEnabled = true;
+    let bgmPlaying = false;
+    let bgmTimer = null;
+    let bgmIndex = 0;
+
+    const BGM_NOTES = [
+      { f: 330, d: 0.19 }, { f: 247, d: 0.19 }, { f: 262, d: 0.19 }, { f: 294, d: 0.19 },
+      { f: 262, d: 0.19 }, { f: 247, d: 0.19 }, { f: 220, d: 0.25 }, { f: 220, d: 0.18 },
+      { f: 262, d: 0.19 }, { f: 330, d: 0.19 }, { f: 294, d: 0.19 }, { f: 262, d: 0.19 },
+      { f: 247, d: 0.24 }, { f: 262, d: 0.19 }, { f: 294, d: 0.24 }, { f: 330, d: 0.24 }
+    ];
+
+    function createBoard() {
+      return Array.from({ length: ROWS }, () => Array(COLS).fill(EMPTY));
+    }
+
+    function resetBoard() {
+      for (let y = 0; y < ROWS; y++) {
+        board[y].fill(EMPTY);
+      }
+    }
+
+    function cloneShape(shape) {
+      return shape.map((r) => [...r]);
+    }
+
+    function makeBag() {
+      const keys = Object.keys(PIECES);
+      for (let i = keys.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [keys[i], keys[j]] = [keys[j], keys[i]];
+      }
+      return keys;
+    }
+
+    function refillQueue() {
+      while (queue.length < 7) {
+        if (bag.length === 0) bag = makeBag();
+        queue.push(bag.pop());
+      }
+    }
+
+    function spawnPiece(type) {
+      const shape = cloneShape(PIECES[type]);
+      return {
+        type,
+        shape,
+        x: Math.floor((COLS - shape[0].length) / 2),
+        y: -1
+      };
+    }
+
+    function nextPiece() {
+      refillQueue();
+      return spawnPiece(queue.shift());
+    }
+
+    function rotate(shape, dir) {
+      const m = shape.length;
+      const n = shape[0].length;
+      const out = Array.from({ length: n }, () => Array(m).fill(0));
+      for (let y = 0; y < m; y++) {
+        for (let x = 0; x < n; x++) {
+          if (dir > 0) out[x][m - 1 - y] = shape[y][x];
+          else out[n - 1 - x][y] = shape[y][x];
+        }
+      }
+      return out;
+    }
+
+    function collision(piece, ox = 0, oy = 0, shape = piece.shape) {
+      for (let y = 0; y < shape.length; y++) {
+        for (let x = 0; x < shape[y].length; x++) {
+          if (!shape[y][x]) continue;
+          const nx = piece.x + x + ox;
+          const ny = piece.y + y + oy;
+          if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+          if (ny >= 0 && board[ny][nx] !== EMPTY) return true;
+        }
+      }
+      return false;
+    }
+
+    function tryRotate(dir) {
+      if (!active || paused || gameOver) return;
+      const rotated = rotate(active.shape, dir);
+      const kicks = [0, -1, 1, -2, 2];
+      for (const k of kicks) {
+        if (!collision(active, k, 0, rotated)) {
+          active.x += k;
+          active.shape = rotated;
+          playSound("rotate");
+          draw();
+          return;
+        }
+      }
+    }
+
+    function move(dx) {
+      if (!active || paused || gameOver) return;
+      if (!collision(active, dx, 0)) {
+        active.x += dx;
+        playSound("move");
+      }
+      draw();
+    }
+
+    function softDrop() {
+      if (!active || paused || gameOver) return;
+      if (!collision(active, 0, 1)) {
+        active.y += 1;
+        score += 1;
+      } else {
+        lockPiece();
+      }
+      draw();
+    }
+
+    function hardDrop() {
+      if (!active || paused || gameOver) return;
+      let dist = 0;
+      while (!collision(active, 0, 1)) {
+        active.y += 1;
+        dist++;
+      }
+      score += dist * 2;
+      playSound("drop");
+      lockPiece();
+      draw();
+    }
+
+    function getGhostY(piece) {
+      let gy = piece.y;
+      while (!collision({ ...piece, y: gy }, 0, 1)) gy++;
+      return gy;
+    }
+
+    function holdPiece() {
+      if (!active || holdUsed || paused || gameOver) return;
+      const prev = hold;
+      hold = active.type;
+      if (prev) active = spawnPiece(prev);
+      else active = nextPiece();
+      holdUsed = true;
+      playSound("hold");
+      if (collision(active)) endGame();
+      draw();
+    }
+
+    function lockPiece() {
+      for (let y = 0; y < active.shape.length; y++) {
+        for (let x = 0; x < active.shape[y].length; x++) {
+          if (!active.shape[y][x]) continue;
+          const by = active.y + y;
+          const bx = active.x + x;
+          if (by >= 0) board[by][bx] = active.type;
+        }
+      }
+
+      const cleared = clearLines();
+      applyScore(cleared);
+      holdUsed = false;
+      active = nextPiece();
+      if (collision(active)) endGame();
+    }
+
+    function clearLines() {
+      const rows = [];
+      for (let y = 0; y < ROWS; y++) {
+        if (board[y].every((v) => v !== EMPTY)) rows.push(y);
+      }
+      if (!rows.length) return 0;
+
+      clearFlashRows = rows;
+      clearFlashUntil = performance.now() + 120;
+
+      for (const y of rows) {
+        board.splice(y, 1);
+        board.unshift(Array(COLS).fill(EMPTY));
+      }
+      playSound("clear");
+      return rows.length;
+    }
+
+    function applyScore(lines) {
+      if (lines > 0) {
+        totalLines += lines;
+        combo += 1;
+
+        const base = [0, 100, 300, 500, 800][lines] || 0;
+        let bonus = combo > 1 ? (combo - 1) * 50 : 0;
+
+        if (lines === 4) {
+          bonus += backToBack ? 300 : 0;
+          backToBack = true;
+        } else {
+          backToBack = false;
+        }
+
+        score += (base + bonus) * level;
+        level = Math.floor(totalLines / 10) + 1;
+        dropInterval = Math.max(80, 850 - (level - 1) * 65);
+      } else {
+        combo = 0;
+      }
+
+      updateUI();
+    }
+
+    function updateUI() {
+      scoreEl.textContent = score;
+      levelEl.textContent = level;
+      linesEl.textContent = totalLines;
+      comboEl.textContent = combo;
+      pauseButton.textContent = paused ? "继续" : "暂停";
+      soundButton.textContent = soundEnabled ? "音效+BGM：开" : "音效+BGM：关";
+    }
+
+    function colorWithAlpha(hex, alpha) {
+      const h = hex.replace("#", "");
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    function drawBlock(targetCtx, x, y, size, color, ghost = false) {
+      targetCtx.fillStyle = ghost ? colorWithAlpha(color, 0.18) : color;
+      targetCtx.fillRect(x * size, y * size, size, size);
+      targetCtx.strokeStyle = ghost ? colorWithAlpha("#ffffff", 0.35) : "rgba(0, 0, 0, 0.35)";
+      targetCtx.lineWidth = 1;
+      targetCtx.strokeRect(x * size, y * size, size, size);
+
+      if (!ghost) {
+        targetCtx.fillStyle = "rgba(255, 255, 255, 0.25)";
+        targetCtx.fillRect(x * size + 2, y * size + 2, size - 4, size / 4);
+      }
+    }
+
+    function drawBoard() {
+      ctx.fillStyle = "#050d1b";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < ROWS; y++) {
+        for (let x = 0; x < COLS; x++) {
+          const v = board[y][x];
+          if (v === EMPTY) {
+            ctx.fillStyle = "#09172c";
+            ctx.fillRect(x * BLOCK, y * BLOCK, BLOCK, BLOCK);
+            ctx.strokeStyle = "rgba(64, 110, 173, 0.16)";
+            ctx.strokeRect(x * BLOCK, y * BLOCK, BLOCK, BLOCK);
+          } else {
+            drawBlock(ctx, x, y, BLOCK, COLORS[v]);
+          }
+        }
+      }
+
+      if (clearFlashRows.length && performance.now() < clearFlashUntil) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.42)";
+        for (const y of clearFlashRows) {
+          ctx.fillRect(0, y * BLOCK, canvas.width, BLOCK);
+        }
+      } else {
+        clearFlashRows = [];
+      }
+    }
+
+    function drawPieceAt(targetCtx, piece, size, oy = 0, ghost = false) {
+      const color = COLORS[piece.type];
+      for (let y = 0; y < piece.shape.length; y++) {
+        for (let x = 0; x < piece.shape[y].length; x++) {
+          if (!piece.shape[y][x]) continue;
+          const px = piece.x + x;
+          const py = piece.y + y + oy;
+          if (py >= 0) drawBlock(targetCtx, px, py, size, color, ghost);
+        }
+      }
+    }
+
+    function drawActive() {
+      if (!active) return;
+      const ghostY = getGhostY(active);
+      drawPieceAt(ctx, { ...active, y: ghostY }, BLOCK, 0, true);
+      drawPieceAt(ctx, active, BLOCK);
+    }
+
+    function drawMini(targetCtx, type) {
+      const w = targetCtx.canvas.width;
+      const h = targetCtx.canvas.height;
+      targetCtx.clearRect(0, 0, w, h);
+      targetCtx.fillStyle = "#081326";
+      targetCtx.fillRect(0, 0, w, h);
+
+      if (!type) return;
+
+      const shape = PIECES[type];
+      const size = 18;
+      const ox = Math.floor((w - shape[0].length * size) / 2 / size);
+      const oy = Math.floor((h - shape.length * size) / 2 / size);
+      drawPieceAt(targetCtx, { type, shape, x: ox, y: oy }, size);
+    }
+
+    function drawSidePanels() {
+      drawMini(holdCtx, hold);
+      refillQueue();
+      for (let i = 0; i < nextCtx.length; i++) {
+        drawMini(nextCtx[i], queue[i] || null);
+      }
+    }
+
+    function draw() {
+      drawBoard();
+      drawActive();
+      drawSidePanels();
+    }
+
+    function loop(time = 0) {
+      if (!running) return;
+      const delta = time - lastTime;
+      lastTime = time;
+
+      if (!paused && !gameOver) {
+        dropCounter += delta;
+        if (dropCounter >= dropInterval) {
+          dropCounter = 0;
+          if (!collision(active, 0, 1)) active.y += 1;
+          else lockPiece();
+        }
+      }
+
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+      resetBoard();
+      bag = [];
+      queue = [];
+      refillQueue();
+
+      active = nextPiece();
+      hold = null;
+      holdUsed = false;
+
+      score = 0;
+      level = 1;
+      totalLines = 0;
+      combo = 0;
+      backToBack = false;
+      paused = false;
+      gameOver = false;
+      dropCounter = 0;
+      dropInterval = 850;
+
+      overlay.classList.remove("show");
+      updateUI();
+      draw();
+
+      if (!running) {
+        running = true;
+        lastTime = performance.now();
+        requestAnimationFrame(loop);
+      }
+
+      playSound("start");
+      startBgm();
+    }
+
+    function endGame() {
+      gameOver = true;
+      paused = false;
+      stopBgm();
+      overlayText.innerHTML = `游戏结束<br>本局得分 ${score}<br>点击“开始游戏”重开`;
+      overlay.classList.add("show");
+      playSound("gameover");
+      updateUI();
+    }
+
+    function togglePause() {
+      if (!running || gameOver) return;
+      paused = !paused;
+      if (paused) stopBgm();
+      else startBgm();
+      overlayText.textContent = paused ? "已暂停" : "";
+      overlay.classList.toggle("show", paused);
+      updateUI();
+      playSound(paused ? "pause" : "move");
+    }
+
+    function ensureAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    }
+
+    function beep(freq, duration, type = "square", gainValue = 0.06) {
+      if (!soundEnabled) return;
+      ensureAudio();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(gainValue, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + duration);
+    }
+
+    function playBgmStep() {
+      if (!bgmPlaying || !soundEnabled || !running || paused || gameOver) return;
+      const note = BGM_NOTES[bgmIndex];
+      bgmIndex = (bgmIndex + 1) % BGM_NOTES.length;
+
+      ensureAudio();
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(note.f, now);
+      gain.gain.setValueAtTime(0.022, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + note.d);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + note.d);
+
+      bgmTimer = setTimeout(playBgmStep, note.d * 1000);
+    }
+
+    function startBgm() {
+      if (bgmPlaying || !soundEnabled || !running || paused || gameOver) return;
+      bgmPlaying = true;
+      if (!bgmTimer) {
+        playBgmStep();
+      }
+    }
+
+    function stopBgm() {
+      bgmPlaying = false;
+      if (bgmTimer) {
+        clearTimeout(bgmTimer);
+        bgmTimer = null;
+      }
+    }
+
+    function playSound(type) {
+      if (!soundEnabled) return;
+      if (type === "move") beep(220, 0.05, "square", 0.04);
+      else if (type === "rotate") beep(370, 0.07, "triangle", 0.05);
+      else if (type === "drop") beep(130, 0.1, "sawtooth", 0.05);
+      else if (type === "hold") beep(280, 0.08, "sine", 0.05);
+      else if (type === "pause") beep(180, 0.08, "square", 0.05);
+      else if (type === "clear") {
+        beep(520, 0.08, "sine", 0.08);
+        setTimeout(() => beep(780, 0.1, "sine", 0.07), 60);
+      } else if (type === "start") {
+        beep(392, 0.08, "triangle", 0.07);
+        setTimeout(() => beep(523, 0.1, "triangle", 0.07), 70);
+      } else if (type === "gameover") {
+        beep(300, 0.2, "sawtooth", 0.08);
+        setTimeout(() => beep(120, 0.25, "sawtooth", 0.07), 150);
+      }
+    }
+
+    function handleAction(action) {
+      if (action === "left") move(-1);
+      else if (action === "right") move(1);
+      else if (action === "down") softDrop();
+      else if (action === "rotate") tryRotate(1);
+      else if (action === "hardDrop") hardDrop();
+      else if (action === "hold") holdPiece();
+      else if (action === "pause") togglePause();
+      else if (action === "restart") startGame();
+      updateUI();
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "p" || e.key === "P") {
+        togglePause();
+        return;
+      }
+      if (!running || paused || gameOver) return;
+
+      if (e.key === "ArrowLeft") handleAction("left");
+      else if (e.key === "ArrowRight") handleAction("right");
+      else if (e.key === "ArrowDown") handleAction("down");
+      else if (e.key === "ArrowUp") handleAction("rotate");
+      else if (e.key === "z" || e.key === "Z") tryRotate(-1);
+      else if (e.key === " ") {
+        e.preventDefault();
+        handleAction("hardDrop");
+      } else if (e.key === "c" || e.key === "C") handleAction("hold");
+      updateUI();
+    });
+
+    startButton.addEventListener("click", () => {
+      ensureAudio();
+      startGame();
+    });
+
+    pauseButton.addEventListener("click", () => handleAction("pause"));
+
+    soundButton.addEventListener("click", () => {
+      soundEnabled = !soundEnabled;
+      if (!soundEnabled) {
+        stopBgm();
+      } else if (running && !paused && !gameOver) {
+        startBgm();
+      }
+      updateUI();
+      if (soundEnabled) playSound("move");
+    });
+
+    document.querySelectorAll(".touch-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        ensureAudio();
+        handleAction(btn.dataset.action);
+      });
+    });
+
+    updateUI();
+    draw();
+  </script>
+</body>
+</html>

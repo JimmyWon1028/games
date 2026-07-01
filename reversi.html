@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>黑白棋 Reversi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+        }
+        h1 {
+            color: #61dafb;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(97, 220, 251, 0.5);
+        }
+        .info {
+            display: flex;
+            gap: 40px;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+        .player {
+            padding: 10px 20px;
+            border-radius: 10px;
+            transition: all 0.3s;
+        }
+        .player.active {
+            background: rgba(97, 220, 251, 0.3);
+            box-shadow: 0 0 15px rgba(97, 220, 251, 0.5);
+        }
+        .black { color: #000; }
+        .white { color: #fff; }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 2px;
+            background: #2d5a27;
+            padding: 5px;
+            border-radius: 5px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            background: #3d6b37;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .cell:hover {
+            background: #4d7b47;
+        }
+        .cell.valid:hover {
+            background: rgba(97, 220, 251, 0.3);
+        }
+        .disc {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            box-shadow: inset 0 3px 5px rgba(255,255,255,0.5), inset 0 -3px 5px rgba(0,0,0,0.3), 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .disc.black {
+            background: radial-gradient(circle at 30% 30%, #444, #000);
+        }
+        .disc.white {
+            background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+        }
+        .disc.new {
+            animation: pop 0.3s ease-out;
+        }
+        @keyframes pop {
+            0% { transform: scale(0); }
+            70% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        #message {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #f39c12;
+            min-height: 30px;
+        }
+        #buttons {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+        }
+        button {
+            padding: 10px 25px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #61dafb;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(97, 220, 251, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <h1>黑白棋 Reversi</h1>
+    <div class="info">
+        <div class="player black" id="blackPlayer">⚫ 黑: <span id="blackScore">2</span></div>
+        <div class="player white" id="whitePlayer">⚪ 白: <span id="whiteScore">2</span></div>
+    </div>
+    <div id="board"></div>
+    <div id="message"></div>
+    <div id="buttons">
+        <button onclick="restart()">重新开始</button>
+        <button onclick="undo()">悔棋</button>
+    </div>
+
+    <script>
+        const SIZE = 8;
+        const board = [];
+        let currentPlayer = 'black';
+        let history = [];
+        let hasPassed = false;
+
+        const directions = [
+            [-1, -1], [-1, 0], [-1, 1],
+            [0, -1],          [0, 1],
+            [1, -1],  [1, 0], [1, 1]
+        ];
+
+        function initBoard() {
+            for (let i = 0; i < SIZE; i++) {
+                board[i] = [];
+                for (let j = 0; j < SIZE; j++) {
+                    board[i][j] = null;
+                }
+            }
+            // Initial 4 pieces
+            board[3][3] = 'white';
+            board[3][4] = 'black';
+            board[4][3] = 'black';
+            board[4][4] = 'white';
+            
+            currentPlayer = 'black';
+            history = [];
+            hasPassed = false;
+            renderBoard();
+            updateScore();
+        }
+
+        function renderBoard() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
+            
+            for (let i = 0; i < SIZE; i++) {
+                for (let j = 0; j < SIZE; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    
+                    if (board[i][j]) {
+                        const disc = document.createElement('div');
+                        disc.className = `disc ${board[i][j]}`;
+                        cell.appendChild(disc);
+                    } else if (canMove(i, j, currentPlayer)) {
+                        cell.classList.add('valid');
+                    }
+                    
+                    cell.addEventListener('click', () => handleClick(i, j));
+                    boardEl.appendChild(cell);
+                }
+            }
+            
+            updatePlayerStatus();
+        }
+
+        function updatePlayerStatus() {
+            document.getElementById('blackPlayer').classList.toggle('active', currentPlayer === 'black');
+            document.getElementById('whitePlayer').classList.toggle('active', currentPlayer === 'white');
+        }
+
+        function canMove(row, col, player) {
+            if (board[row][col]) return false;
+            
+            const opponent = player === 'black' ? 'white' : 'black';
+            
+            for (const [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let hasOpponent = false;
+                
+                while (r >= 0 && r < SIZE && c >= 0 && c < SIZE) {
+                    if (board[r][c] === opponent) {
+                        hasOpponent = true;
+                    } else if (board[r][c] === player) {
+                        if (hasOpponent) return true;
+                        break;
+                    } else {
+                        break;
+                    }
+                    r += dr;
+                    c += dc;
+                }
+            }
+            return false;
+        }
+
+        function getFlippable(row, col, player) {
+            const flippable = [];
+            const opponent = player === 'black' ? 'white' : 'black';
+            
+            for (const [dr, dc] of directions) {
+                let r = row + dr;
+                let c = col + dc;
+                let potential = [];
+                
+                while (r >= 0 && r < SIZE && c >= 0 && c < SIZE) {
+                    if (board[r][c] === opponent) {
+                        potential.push({ row: r, col: c });
+                    } else if (board[r][c] === player) {
+                        if (potential.length > 0) flippable.push(...potential);
+                        break;
+                    } else {
+                        break;
+                    }
+                    r += dr;
+                    c += dc;
+                }
+            }
+            return flippable;
+        }
+
+        function handleClick(row, col) {
+            if (board[row][col]) return;
+            if (!canMove(row, col, currentPlayer)) return;
+            
+            const flippable = getFlippable(row, col, currentPlayer);
+            if (flippable.length === 0) return;
+            
+            // Save state for undo
+            history.push({
+                board: board.map(row => [...row]),
+                player: currentPlayer
+            });
+            
+            // Place piece
+            board[row][col] = currentPlayer;
+            
+            // Flip opponent pieces
+            flippable.forEach(p => {
+                board[p.row][p.col] = currentPlayer;
+            });
+            
+            // Switch player
+            const nextPlayer = currentPlayer === 'black' ? 'white' : 'black';
+            const canMoveNext = hasValidMove(nextPlayer);
+            
+            if (!canMoveNext) {
+                if (hasValidMove(currentPlayer)) {
+                    if (!hasPassed) {
+                        showMessage(nextPlayer === 'black' ? '⚫ 黑方无棋可走，继续' : '⚪ 白方无棋可走，继续');
+                        hasPassed = true;
+                    } else {
+                        gameOver();
+                        return;
+                    }
+                } else {
+                    gameOver();
+                    return;
+                }
+            } else {
+                hasPassed = false;
+            }
+            
+            currentPlayer = canMoveNext ? nextPlayer : currentPlayer;
+            renderBoard();
+            updateScore();
+            
+            // Check for pass message
+            if (!hasValidMove(currentPlayer)) {
+                const other = currentPlayer === 'black' ? 'white' : 'black';
+                showMessage((other === 'black' ? '⚫ 黑' : '⚪ 白') + '方无棋可走');
+            }
+        }
+
+        function hasValidMove(player) {
+            for (let i = 0; i < SIZE; i++) {
+                for (let j = 0; j < SIZE; j++) {
+                    if (canMove(i, j, player)) return true;
+                }
+            }
+            return false;
+        }
+
+        function updateScore() {
+            let black = 0, white = 0;
+            for (let i = 0; i < SIZE; i++) {
+                for (let j = 0; j < SIZE; j++) {
+                    if (board[i][j] === 'black') black++;
+                    if (board[i][j] === 'white') white++;
+                }
+            }
+            document.getElementById('blackScore').textContent = black;
+            document.getElementById('whiteScore').textContent = white;
+        }
+
+        function showMessage(msg) {
+            document.getElementById('message').textContent = msg;
+        }
+
+        function gameOver() {
+            const black = parseInt(document.getElementById('blackScore').textContent);
+            const white = parseInt(document.getElementById('whiteScore').textContent);
+            
+            let msg;
+            if (black > white) msg = '⚫ 黑方获胜!';
+            else if (white > black) msg = '⚪ 白方获胜!';
+            else msg = '平局!';
+            
+            showMessage(msg);
+            renderBoard();
+            
+            // Disable board clicks
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.style.pointerEvents = 'none';
+            });
+        }
+
+        function restart() {
+            initBoard();
+            showMessage('');
+        }
+
+        function undo() {
+            if (history.length === 0) return;
+            
+            const state = history.pop();
+            for (let i = 0; i < SIZE; i++) {
+                board[i] = [...state.board[i]];
+            }
+            currentPlayer = state.player;
+            hasPassed = false;
+            renderBoard();
+            updateScore();
+            showMessage('已悔棋');
+        }
+
+        // Start game
+        initBoard();
+    </script>
+</body>
+</html>
