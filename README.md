@@ -22,6 +22,7 @@
 | 🪙 **金樸克** | 卡牌 | 街機 Video Poker 撲克 |
 | ⚫ **五子棋** | 棋類 | 人機對弈，先連五子者勝 |
 | 💣 **炸彈人** | 動作 | 迷宮放置炸彈，爆破敵人 |
+| 🚗 **迷魂車** | 迷宮追逐 | 經典 Rally-X，捲動迷宮、雷達、放煙霧甩開敵車 |
 | 🛡️ **坦克大戰 豪華版** | 動作 | Battle City 風格坦克對戰 |
 | 🦖 **恐龍快跑** | 跑酷 | Chrome 恐龍跳躍躲避障礙 |
 | ⚪ **黑白棋 Reversi** | 棋類 | 翻轉對手棋子 |
@@ -83,6 +84,7 @@ games/
 ├── flappybird.html         # Flappy Bird
 ├── minesweeper.html        # 掃雷
 ├── clicker.html            # 點擊大師
+├── rallyx.html             # 迷魂車 (Rally-X)
 └── streetfighter.html      # 快打旋風
 ```
 
