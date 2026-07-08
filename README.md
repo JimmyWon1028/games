@@ -6,10 +6,6 @@
 
 一個純前端的經典遊戲合集。所有遊戲都以單檔 HTML 製作，入口大廳提供搜尋、分類篩選與隨機開玩，開啟靜態伺服器就能直接遊玩。
 
-![preview](assets/images/1.jpg)
-
----
-
 ## 線上展示
 
 GitHub Pages: https://jimmywon1028.github.io/games/
@@ -85,8 +81,7 @@ games/
 ├── AGENTS.md               # Codex 維護規則
 ├── assets/
 │   ├── images/
-│   │   ├── logo.png        # 專案 Logo
-│   │   └── 1.jpg           # README 預覽圖
+│   │   └── logo.png        # 專案 Logo
 │   └── audio/
 │       ├── 01_High Score.mp3
 │       ├── 02_Level BGM.mp3
