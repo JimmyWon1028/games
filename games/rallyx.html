@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>迷魂車 RALLY-X</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      color: #f7f8ff;
+      background:
+        radial-gradient(circle at 50% 8%, rgba(34, 82, 158, 0.35), transparent 32%),
+        linear-gradient(180deg, #050714, #090914 62%, #050508);
+      font-family: "Courier New", monospace;
+    }
+
+    .cabinet {
+      width: min(96vw, 650px);
+      padding: 14px 16px 16px;
+      border: 3px solid #23253d;
+      border-radius: 18px;
+      background: #101122;
+      box-shadow:
+        inset 0 0 0 2px #050611,
+        0 24px 70px rgba(0, 0, 0, 0.72),
+        0 0 38px rgba(62, 177, 255, 0.18);
+    }
+
+    .marquee {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+      padding: 7px 10px;
+      border: 2px solid #33375d;
+      border-radius: 10px;
+      color: #ffda54;
+      background: linear-gradient(180deg, #171936, #0c0d1f);
+      font-size: clamp(0.74rem, 2.4vw, 0.92rem);
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(255, 218, 84, 0.38);
+    }
+
+    .marquee b {
+      color: #fff8c6;
+    }
+
+    .music-btn {
+      min-width: 72px;
+      border: 1px solid #555b8b;
+      border-radius: 999px;
+      color: #fff8c6;
+      background: #141733;
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+
+    .music-btn.is-on {
+      color: #09101d;
+      background: #ffda54;
+      border-color: #ffda54;
+    }
+
+    canvas {
+      width: 100%;
+      display: block;
+      image-rendering: pixelated;
+      border: 3px solid #050611;
+      border-radius: 8px;
+      background: #000;
+      box-shadow: inset 0 0 0 2px #2a2d49;
+      touch-action: none;
+    }
+
+    .hint {
+      min-height: 18px;
+      margin-top: 9px;
+      color: #97a4c6;
+      text-align: center;
+      font-size: clamp(0.68rem, 2.2vw, 0.84rem);
+    }
+  </style>
+</head>
+<body>
+  <main class="cabinet" aria-label="迷魂車街機版">
+    <div class="marquee">
+      <span>1UP <b id="score">00000</b></span>
+      <span>HIGH <b id="hiscore">00000</b></span>
+      <span>ROUND <b id="round">1</b></span>
+      <button class="music-btn" id="musicToggle" type="button">BGM OFF</button>
+    </div>
+    <canvas id="game" width="600" height="440" aria-label="迷魂車遊戲畫面"></canvas>
+    <audio id="bgm" src="../assets/audio/02_Level%20BGM.mp3" preload="auto" loop></audio>
+    <audio id="sfxHighScore" src="../assets/audio/01_High%20Score.mp3" preload="auto"></audio>
+    <audio id="sfxLevelFinish" src="../assets/audio/03_Level%20Finish.mp3" preload="auto"></audio>
+    <audio id="sfxBonusStart" src="../assets/audio/04_Bonus%20Round%20Start.mp3" preload="auto"></audio>
+    <audio id="sfxGameStart" src="../assets/audio/05_Game%20Start.mp3" preload="auto"></audio>
+    <p class="hint" id="message">方向鍵移動 · SPACE 放煙霧 · 收集全部旗子</p>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const highEl = document.getElementById("hiscore");
+    const roundEl = document.getElementById("round");
+    const messageEl = document.getElementById("message");
+    const bgm = document.getElementById("bgm");
+    const musicToggle = document.getElementById("musicToggle");
+    const sfxHighScore = document.getElementById("sfxHighScore");
+    const sfxLevelFinish = document.getElementById("sfxLevelFinish");
+    const sfxBonusStart = document.getElementById("sfxBonusStart");
+    const sfxGameStart = document.getElementById("sfxGameStart");
+
+    const TILE = 16;
+    const MAP_W = 48;
+    const MAP_H = 36;
+    const VIEW_W = 432;
+    const VIEW_H = 432;
+    const PANEL_X = VIEW_W;
+    const TOTAL_FLAGS = 10;
+    const SAVE_KEY = "rallyx-high-score";
+
+    const keys = {
+      ArrowLeft: false,
+      ArrowRight: false,
+      ArrowUp: false,
+      ArrowDown: false
+    };
+
+    const flagSpots = [
+      [6, 4], [20, 4], [37, 5], [43, 12], [31, 14],
+      [8, 18], [18, 24], [40, 26], [27, 31], [5, 32]
+    ];
+    const rockSpots = [[15, 9], [29, 8], [10, 27], [34, 22], [22, 17], [42, 33]];
+    const enemySpots = [[43, 4], [42, 31], [6, 30], [25, 7], [38, 18]];
+
+    let audioCtx;
+    let highScore = Number(localStorage.getItem(SAVE_KEY) || 0);
+    let lastTime = 0;
+    let touchStart = null;
+    let heldDirection = null;
+    let game;
+
+    highEl.textContent = padScore(highScore);
+
+    function syncMusicButton() {
+      musicToggle.classList.toggle("is-on", !bgm.paused);
+      musicToggle.textContent = bgm.paused ? "BGM OFF" : "BGM ON";
+    }
+
+    function padScore(value) {
+      return String(Math.max(0, Math.floor(value))).padStart(5, "0");
+    }
+
+    function tileIndex(tx, ty) {
+      return ty * MAP_W + tx;
+    }
+
+    function buildMap() {
+      const map = new Uint8Array(MAP_W * MAP_H);
+
+      for (let y = 0; y < MAP_H; y += 1) {
+        for (let x = 0; x < MAP_W; x += 1) {
+          const border = x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1;
+          map[tileIndex(x, y)] = border ? 1 : 0;
+        }
+      }
+
+      // Wide rectangular islands produce the clean, old arcade maze rhythm.
+      const blocks = [
+        [4, 6, 7, 2], [16, 6, 6, 2], [29, 6, 9, 2],
+        [8, 12, 5, 4], [19, 11, 8, 3], [34, 12, 6, 5],
+        [3, 20, 8, 3], [16, 20, 5, 5], [27, 20, 8, 3],
+        [39, 21, 5, 7], [8, 29, 8, 2], [24, 29, 9, 2]
+      ];
+
+      blocks.forEach(([bx, by, bw, bh]) => {
+        for (let y = by; y < by + bh; y += 1) {
+          for (let x = bx; x < bx + bw; x += 1) {
+            map[tileIndex(x, y)] = 1;
+          }
+        }
+      });
+
+      // Skinny vertical dividers make the radar chase feel more like an arcade board.
+      const posts = [
+        [13, 3, 7], [24, 3, 6], [41, 4, 7],
+        [6, 15, 6], [30, 12, 7], [15, 25, 6],
+        [36, 27, 6], [45, 18, 7]
+      ];
+
+      posts.forEach(([px, py, ph]) => {
+        for (let y = py; y < py + ph; y += 1) {
+          map[tileIndex(px, y)] = 1;
+        }
+      });
+
+      // Open the starting pocket and important item cells.
+      const clears = [[2, 2], [3, 2], [2, 3], [3, 3], ...flagSpots, ...rockSpots, ...enemySpots];
+      clears.forEach(([x, y]) => {
+        for (let yy = y - 1; yy <= y + 1; yy += 1) {
+          for (let xx = x - 1; xx <= x + 1; xx += 1) {
+            if (xx > 0 && yy > 0 && xx < MAP_W - 1 && yy < MAP_H - 1) {
+              map[tileIndex(xx, yy)] = 0;
+            }
+          }
+        }
+      });
+
+      return map;
+    }
+
+    const map = buildMap();
+
+    function isWall(tx, ty) {
+      if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+      return map[tileIndex(tx, ty)] === 1;
+    }
+
+    function canOccupy(x, y) {
+      const pad = 5;
+      const points = [
+        [x - pad, y - pad], [x + pad, y - pad],
+        [x - pad, y + pad], [x + pad, y + pad]
+      ];
+      return points.every(([px, py]) => !isWall(Math.floor(px / TILE), Math.floor(py / TILE)));
+    }
+
+    function snapToCenter(value) {
+      return Math.round((value - TILE / 2) / TILE) * TILE + TILE / 2;
+    }
+
+    function makeCar(tx, ty, color, speed, dirX = 1, dirY = 0) {
+      return {
+        x: tx * TILE + TILE / 2,
+        y: ty * TILE + TILE / 2,
+        dirX,
+        dirY,
+        nextX: dirX,
+        nextY: dirY,
+        color,
+        speed,
+        stun: 0,
+        turnDelay: 0
+      };
+    }
+
+    function resetGame(keepRound) {
+      const round = keepRound ? game.round : 1;
+      game = {
+        round,
+        score: keepRound ? game.score : 0,
+        fuel: 100,
+        state: "ready",
+        time: 0,
+        shake: 0,
+        highScoreNotified: false,
+        player: makeCar(2, 2, "#2f7cff", 82, 0, 0),
+        enemies: enemySpots.slice(0, Math.min(2 + Math.floor(round / 2), enemySpots.length))
+          .map((spot, index) => makeCar(spot[0], spot[1], index % 2 ? "#ff7045" : "#f43f5e", 58 + round * 4, -1, 0)),
+        flags: flagSpots.map((spot, index) => ({
+          x: spot[0] * TILE + TILE / 2,
+          y: spot[1] * TILE + TILE / 2,
+          special: index === 0,
+          got: false
+        })),
+        rocks: rockSpots.map((spot) => ({
+          x: spot[0] * TILE + TILE / 2,
+          y: spot[1] * TILE + TILE / 2
+        })),
+        smoke: [],
+        collected: 0
+      };
+
+      scoreEl.textContent = padScore(game.score);
+      roundEl.textContent = game.round;
+      messageEl.textContent = "SPACE 開始 · 方向鍵出發 · 收集全部旗子";
+    }
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === "suspended") audioCtx.resume();
+    }
+
+    function tone(freq, dur, type, volume, dest) {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(volume, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(gain);
+      gain.connect(dest || audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + dur + 0.02);
+    }
+
+    function noise(dur, volume, dest) {
+      if (!audioCtx) return;
+      const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      const source = audioCtx.createBufferSource();
+      const filter = audioCtx.createBiquadFilter();
+      const gain = audioCtx.createGain();
+      filter.type = "highpass";
+      filter.frequency.value = 1800;
+      gain.gain.value = volume;
+      source.buffer = buffer;
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(dest || audioCtx.destination);
+      source.start();
+    }
+
+    function startMusic(restart = false) {
+      initAudio();
+      bgm.volume = 0.55;
+      if (restart) bgm.currentTime = 0;
+      if (bgm.paused) {
+        bgm.play().catch(() => {
+          messageEl.textContent = "瀏覽器尚未允許音樂，請點 BGM 或再按一次方向鍵";
+        }).finally(syncMusicButton);
+      }
+      syncMusicButton();
+    }
+
+    function stopMusic() {
+      bgm.pause();
+      bgm.currentTime = 0;
+      syncMusicButton();
+    }
+
+    function playAudioClip(audio, volume = 0.85) {
+      const clip = audio.cloneNode(true);
+      clip.volume = volume;
+      clip.play().catch(() => {
+        messageEl.textContent = "瀏覽器尚未允許音效，請點 BGM 或再按一次方向鍵";
+      });
+    }
+
+    function sfxStart() {
+      playAudioClip(sfxGameStart, 0.85);
+    }
+
+    function sfxFlag(special) {
+      if (special) {
+        playAudioClip(sfxBonusStart, 0.9);
+      } else {
+        initAudio();
+        tone(880, 0.08, "square", 0.075);
+        setTimeout(() => tone(1174, 0.08, "square", 0.06), 70);
+      }
+    }
+
+    function sfxSmoke() {
+      initAudio();
+      for (let i = 0; i < 5; i += 1) {
+        setTimeout(() => {
+          tone(72 + Math.random() * 46, 0.08, "sawtooth", 0.035);
+          noise(0.05, 0.025);
+        }, i * 32);
+      }
+    }
+
+    function sfxCrash() {
+      initAudio();
+      stopMusic();
+      tone(220, 0.28, "sawtooth", 0.12);
+      setTimeout(() => tone(146, 0.35, "sawtooth", 0.1), 120);
+      setTimeout(() => noise(0.35, 0.08), 40);
+    }
+
+    function startRound() {
+      if (game.state === "playing") return;
+      if (game.state === "gameover") resetGame(false);
+      game.state = "playing";
+      messageEl.textContent = "按方向鍵出發，必要時用 SPACE 煙霧甩開紅車";
+      sfxStart();
+      startMusic(true);
+    }
+
+    function setDirection(dx, dy) {
+      game.player.nextX = dx;
+      game.player.nextY = dy;
+      startRound();
+      startMusic();
+    }
+
+    function bufferDirection(dx, dy) {
+      game.player.nextX = dx;
+      game.player.nextY = dy;
+    }
+
+    function canMoveFromCenter(x, y, dx, dy) {
+      return canOccupy(x + dx * (TILE / 2 + 2), y + dy * (TILE / 2 + 2));
+    }
+
+    function attemptMove(car, dt) {
+      const step = car.speed * dt;
+      const centerX = snapToCenter(car.x);
+      const centerY = snapToCenter(car.y);
+      const wantsTurn = car.nextX !== car.dirX || car.nextY !== car.dirY;
+      const isStopped = car.dirX === 0 && car.dirY === 0;
+      const wantsReverse = car.nextX === -car.dirX && car.nextY === -car.dirY;
+      const turnWindow = step + 8;
+      const nearTurnPoint = car.dirX !== 0
+        ? Math.abs(car.x - centerX) <= turnWindow
+        : Math.abs(car.y - centerY) <= turnWindow;
+
+      if (wantsReverse) {
+        car.dirX = car.nextX;
+        car.dirY = car.nextY;
+      }
+
+      if ((isStopped || (wantsTurn && nearTurnPoint)) && canMoveFromCenter(centerX, centerY, car.nextX, car.nextY)) {
+        car.x = centerX;
+        car.y = centerY;
+        car.dirX = car.nextX;
+        car.dirY = car.nextY;
+      }
+
+      if (car.dirX !== 0) car.y = centerY;
+      if (car.dirY !== 0) car.x = centerX;
+
+      const nx = car.x + car.dirX * step;
+      const ny = car.y + car.dirY * step;
+      if (canOccupy(nx, ny)) {
+        car.x = nx;
+        car.y = ny;
+        return true;
+      }
+
+      car.x = centerX;
+      car.y = centerY;
+      if (wantsTurn && canMoveFromCenter(centerX, centerY, car.nextX, car.nextY)) {
+        car.dirX = car.nextX;
+        car.dirY = car.nextY;
+        return true;
+      }
+      car.dirX = 0;
+      car.dirY = 0;
+      return false;
+    }
+
+    function chooseEnemyDirection(enemy) {
+      const tx = Math.floor(enemy.x / TILE);
+      const ty = Math.floor(enemy.y / TILE);
+      const choices = [
+        [1, 0], [-1, 0], [0, 1], [0, -1]
+      ].filter(([dx, dy]) => {
+        if (dx === -enemy.dirX && dy === -enemy.dirY) return false;
+        return !isWall(tx + dx, ty + dy);
+      });
+
+      if (!choices.length) {
+        choices.push([-enemy.dirX, -enemy.dirY]);
+      }
+
+      choices.sort((a, b) => {
+        const da = Math.abs(tx + a[0] - Math.floor(game.player.x / TILE)) + Math.abs(ty + a[1] - Math.floor(game.player.y / TILE));
+        const db = Math.abs(tx + b[0] - Math.floor(game.player.x / TILE)) + Math.abs(ty + b[1] - Math.floor(game.player.y / TILE));
+        return da - db;
+      });
+
+      const brave = Math.random() < 0.78 + Math.min(0.16, game.round * 0.025);
+      const pick = brave ? choices[0] : choices[Math.floor(Math.random() * choices.length)];
+      enemy.nextX = pick[0];
+      enemy.nextY = pick[1];
+    }
+
+    function dropSmoke() {
+      if (game.state !== "playing" || game.fuel < 9) return;
+      startMusic();
+      game.fuel = Math.max(0, game.fuel - 9);
+      const backX = -game.player.dirX || 0;
+      const backY = -game.player.dirY || 0;
+
+      for (let i = 0; i < 9; i += 1) {
+        game.smoke.push({
+          x: game.player.x + backX * 12 + (Math.random() - 0.5) * 18,
+          y: game.player.y + backY * 12 + (Math.random() - 0.5) * 18,
+          vx: (Math.random() - 0.5) * 9,
+          vy: (Math.random() - 0.5) * 9,
+          life: 0.9 + Math.random() * 0.45,
+          max: 1.2,
+          size: 8 + Math.random() * 8
+        });
+      }
+      sfxSmoke();
+    }
+
+    function collectFlags() {
+      game.flags.forEach((flag) => {
+        if (flag.got) return;
+        if (Math.hypot(game.player.x - flag.x, game.player.y - flag.y) < 13) {
+          flag.got = true;
+          game.collected += 1;
+          game.score += flag.special ? 500 : 100 + game.collected * 20;
+          game.fuel = Math.min(100, game.fuel + (flag.special ? 24 : 8));
+          scoreEl.textContent = padScore(game.score);
+          sfxFlag(flag.special);
+
+          if (game.score > highScore) {
+            highScore = game.score;
+            highEl.textContent = padScore(highScore);
+            localStorage.setItem(SAVE_KEY, String(highScore));
+            if (!game.highScoreNotified) {
+              game.highScoreNotified = true;
+              playAudioClip(sfxHighScore, 0.9);
+            }
+          }
+        }
+      });
+
+      if (game.collected >= TOTAL_FLAGS) {
+        game.state = "clear";
+        stopMusic();
+        playAudioClip(sfxLevelFinish, 0.9);
+        setTimeout(() => {
+          game.round += 1;
+          resetGame(true);
+          startRound();
+        }, 1200);
+      }
+    }
+
+    function crash() {
+      if (game.state !== "playing") return;
+      game.state = "gameover";
+      game.shake = 0.45;
+      messageEl.textContent = "撞車了！按 SPACE 重新開始";
+      sfxCrash();
+    }
+
+    function update(dt) {
+      game.time += dt;
+      if (game.shake > 0) game.shake -= dt;
+      if (game.state !== "playing") {
+        updateSmoke(dt);
+        return;
+      }
+
+      applyHeldDirection();
+
+      if (game.player.dirX === 0 && game.player.dirY === 0 && game.player.nextX === 0 && game.player.nextY === 0) {
+        updateSmoke(dt);
+        return;
+      }
+
+      game.fuel -= dt * (3.2 + game.round * 0.18);
+      if (game.fuel <= 0) {
+        game.fuel = 0;
+        crash();
+      }
+
+      attemptMove(game.player, dt);
+
+      game.enemies.forEach((enemy) => {
+        if (enemy.stun > 0) {
+          enemy.stun -= dt;
+          return;
+        }
+        enemy.turnDelay -= dt;
+        if (enemy.turnDelay <= 0) {
+          chooseEnemyDirection(enemy);
+          enemy.turnDelay = 0.08 + Math.random() * 0.18;
+        }
+        attemptMove(enemy, dt);
+      });
+
+      updateSmoke(dt);
+      collectFlags();
+
+      game.rocks.forEach((rock) => {
+        if (Math.hypot(game.player.x - rock.x, game.player.y - rock.y) < 11) crash();
+      });
+
+      game.enemies.forEach((enemy) => {
+        if (enemy.stun <= 0 && Math.hypot(game.player.x - enemy.x, game.player.y - enemy.y) < 13) crash();
+      });
+    }
+
+    function applyHeldDirection() {
+      if (heldDirection) bufferDirection(heldDirection[0], heldDirection[1]);
+    }
+
+    function updateSmoke(dt) {
+      game.smoke = game.smoke.filter((smoke) => {
+        smoke.life -= dt;
+        smoke.x += smoke.vx * dt;
+        smoke.y += smoke.vy * dt;
+
+        game.enemies.forEach((enemy) => {
+          if (enemy.stun <= 0 && Math.hypot(enemy.x - smoke.x, enemy.y - smoke.y) < smoke.size + 8) {
+            enemy.stun = 1.35;
+            enemy.dirX *= -1;
+            enemy.dirY *= -1;
+          }
+        });
+
+        return smoke.life > 0;
+      });
+    }
+
+    function camera() {
+      return {
+        x: Math.max(0, Math.min(MAP_W * TILE - VIEW_W, game.player.x - VIEW_W / 2)),
+        y: Math.max(0, Math.min(MAP_H * TILE - VIEW_H, game.player.y - VIEW_H / 2))
+      };
+    }
+
+    function draw() {
+      ctx.save();
+      ctx.fillStyle = "#02030a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      if (game.shake > 0) {
+        ctx.translate((Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6);
+      }
+
+      drawWorld();
+      ctx.restore();
+      drawPanel();
+      drawOverlay();
+    }
+
+    function drawWorld() {
+      const cam = camera();
+      const sx = Math.max(0, Math.floor(cam.x / TILE) - 1);
+      const sy = Math.max(0, Math.floor(cam.y / TILE) - 1);
+      const ex = Math.min(MAP_W, sx + Math.ceil(VIEW_W / TILE) + 3);
+      const ey = Math.min(MAP_H, sy + Math.ceil(VIEW_H / TILE) + 3);
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, VIEW_W, VIEW_H);
+      ctx.clip();
+
+      ctx.fillStyle = "#d65a8b";
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+
+      for (let y = sy; y < ey; y += 1) {
+        for (let x = sx; x < ex; x += 1) {
+          const px = x * TILE - cam.x;
+          const py = y * TILE - cam.y;
+          if (map[tileIndex(x, y)] === 1) {
+            drawWall(px, py);
+          } else if ((x + y) % 2 === 0) {
+            ctx.fillStyle = "rgba(255, 193, 218, 0.18)";
+            ctx.fillRect(px, py, TILE, TILE);
+          }
+        }
+      }
+
+      game.rocks.forEach((rock) => drawRock(rock.x - cam.x, rock.y - cam.y));
+      game.flags.forEach((flag, index) => {
+        if (!flag.got) drawFlag(flag.x - cam.x, flag.y - cam.y, flag.special, index);
+      });
+      game.smoke.forEach((smoke) => drawSmoke(smoke.x - cam.x, smoke.y - cam.y, smoke));
+      game.enemies.forEach((enemy) => drawCar(enemy.x - cam.x, enemy.y - cam.y, enemy, false));
+      drawCar(game.player.x - cam.x, game.player.y - cam.y, game.player, true);
+
+      ctx.restore();
+    }
+
+    function drawWall(x, y) {
+      ctx.fillStyle = "#f2f0e6";
+      ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = "#c8cad4";
+      ctx.fillRect(x, y + TILE - 4, TILE, 4);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(x + 2, y + 2, TILE - 4, 3);
+    }
+
+    function drawRock(x, y) {
+      if (x < -20 || y < -20 || x > VIEW_W + 20 || y > VIEW_H + 20) return;
+      ctx.fillStyle = "#5e4538";
+      ctx.beginPath();
+      ctx.ellipse(x, y + 1, 8, 6, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#9b7964";
+      ctx.beginPath();
+      ctx.ellipse(x - 2, y - 1, 3, 2, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawFlag(x, y, special, index) {
+      if (x < -24 || y < -24 || x > VIEW_W + 24 || y > VIEW_H + 24) return;
+      const bob = Math.sin(game.time * 8 + index) * 1.5;
+      ctx.save();
+      ctx.translate(x, y + bob);
+      ctx.strokeStyle = "#f7f7f7";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-2, -10);
+      ctx.lineTo(-2, 10);
+      ctx.stroke();
+      ctx.fillStyle = special ? "#ef4444" : "#ffd84a";
+      ctx.beginPath();
+      ctx.moveTo(-1, -10);
+      ctx.lineTo(11, -6);
+      ctx.lineTo(-1, -2);
+      ctx.closePath();
+      ctx.fill();
+      if (special) {
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 7px monospace";
+        ctx.fillText("S", 2, -5);
+      }
+      ctx.restore();
+    }
+
+    function drawSmoke(x, y, smoke) {
+      const alpha = Math.max(0, smoke.life / smoke.max);
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.55;
+      ctx.fillStyle = "#e8edf2";
+      ctx.shadowColor = "rgba(255, 255, 255, 0.35)";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(x, y, smoke.size * (1.15 - alpha * 0.25), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawCar(x, y, car, isPlayer) {
+      if (x < -24 || y < -24 || x > VIEW_W + 24 || y > VIEW_H + 24) return;
+      const angle = car.dirX === 0 && car.dirY === 0 ? 0 : Math.atan2(car.dirY, car.dirX);
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      if (car.stun > 0 && !isPlayer) {
+        ctx.globalAlpha = 0.65 + Math.sin(game.time * 28) * 0.25;
+      }
+      if (isPlayer) {
+        ctx.strokeStyle = "#f8fbff";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(12, 0);
+        ctx.lineTo(6, -9);
+        ctx.lineTo(-8, -9);
+        ctx.lineTo(-12, -4);
+        ctx.lineTo(-12, 4);
+        ctx.lineTo(-8, 9);
+        ctx.lineTo(6, 9);
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.shadowColor = isPlayer ? "rgba(48, 144, 255, 0.5)" : "rgba(255, 80, 72, 0.45)";
+      ctx.shadowBlur = 8;
+      ctx.fillStyle = car.color;
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(5, -8);
+      ctx.lineTo(-7, -8);
+      ctx.lineTo(-11, -4);
+      ctx.lineTo(-11, 4);
+      ctx.lineTo(-7, 8);
+      ctx.lineTo(5, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = isPlayer ? "#9bd7ff" : "#ffd1c5";
+      ctx.fillRect(-2, -5, 8, 10);
+      if (isPlayer) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(2, -3, 3, 6);
+      }
+      ctx.fillStyle = "#111827";
+      ctx.fillRect(-8, -10, 5, 3);
+      ctx.fillRect(2, -10, 5, 3);
+      ctx.fillRect(-8, 7, 5, 3);
+      ctx.fillRect(2, 7, 5, 3);
+      ctx.restore();
+    }
+
+    function drawPanel() {
+      ctx.fillStyle = "#0b0d1e";
+      ctx.fillRect(PANEL_X, 0, canvas.width - PANEL_X, canvas.height);
+      ctx.fillStyle = "#151a34";
+      ctx.fillRect(PANEL_X + 8, 8, 152, 424);
+      ctx.strokeStyle = "#333b6a";
+      ctx.strokeRect(PANEL_X + 8, 8, 152, 424);
+
+      drawRadar(PANEL_X + 18, 18, 132, 132);
+      drawFuel(PANEL_X + 18, 176);
+      drawFlagPanel(PANEL_X + 18, 226);
+      drawLegend(PANEL_X + 18, 314);
+    }
+
+    function drawRadar(x, y, size) {
+      ctx.fillStyle = "#050712";
+      ctx.fillRect(x, y, size, size);
+      ctx.strokeStyle = "#3b4274";
+      ctx.strokeRect(x, y, size, size);
+
+      const sx = size / (MAP_W * TILE);
+      const sy = size / (MAP_H * TILE);
+      game.flags.forEach((flag) => {
+        if (flag.got) return;
+        ctx.fillStyle = flag.special ? "#ef4444" : "#ffd84a";
+        ctx.fillRect(x + flag.x * sx - 1, y + flag.y * sy - 1, 3, 3);
+      });
+      game.enemies.forEach((enemy) => {
+        ctx.fillStyle = "#ff4d5d";
+        ctx.fillRect(x + enemy.x * sx - 1, y + enemy.y * sy - 1, 3, 3);
+      });
+      ctx.fillStyle = "#64c8ff";
+      ctx.fillRect(x + game.player.x * sx - 2, y + game.player.y * sy - 2, 4, 4);
+    }
+
+    function drawFuel(x, y) {
+      ctx.fillStyle = "#c7cdea";
+      ctx.font = "bold 12px monospace";
+      ctx.fillText("FUEL", x, y);
+      ctx.fillStyle = "#050712";
+      ctx.fillRect(x, y + 10, 132, 13);
+      const w = Math.max(0, Math.min(132, 132 * game.fuel / 100));
+      ctx.fillStyle = game.fuel > 45 ? "#47d16c" : game.fuel > 22 ? "#ffd84a" : "#ef4444";
+      ctx.fillRect(x, y + 10, w, 13);
+      ctx.strokeStyle = "#3b4274";
+      ctx.strokeRect(x, y + 10, 132, 13);
+    }
+
+    function drawFlagPanel(x, y) {
+      ctx.fillStyle = "#c7cdea";
+      ctx.font = "bold 12px monospace";
+      ctx.fillText("FLAGS", x, y);
+      for (let i = 0; i < TOTAL_FLAGS; i += 1) {
+        const px = x + (i % 5) * 25;
+        const py = y + 13 + Math.floor(i / 5) * 22;
+        ctx.strokeStyle = "#31375f";
+        ctx.strokeRect(px - 4, py - 5, 18, 16);
+        ctx.fillStyle = i < game.collected ? "#ffd84a" : "#24283f";
+        ctx.fillRect(px, py - 4, 3, 13);
+        ctx.beginPath();
+        ctx.moveTo(px + 3, py - 4);
+        ctx.lineTo(px + 13, py);
+        ctx.lineTo(px + 3, py + 4);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    function drawLegend(x, y) {
+      ctx.fillStyle = "#7f8bad";
+      ctx.font = "10px monospace";
+      ctx.fillText("BLUE  : YOU", x, y);
+      ctx.fillText("RED   : CHASER", x, y + 18);
+      ctx.fillText("YELLOW: FLAG", x, y + 36);
+      ctx.fillText("SPACE : SMOKE", x, y + 54);
+    }
+
+    function drawOverlay() {
+      if (game.state === "playing") return;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.58)";
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      ctx.textAlign = "center";
+      if (game.state === "ready") {
+        ctx.fillStyle = "#ffdc5c";
+        ctx.font = "bold 32px monospace";
+        ctx.fillText("RALLY-X", VIEW_W / 2, VIEW_H / 2 - 36);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "15px monospace";
+        ctx.fillText("PRESS ARROW OR SPACE", VIEW_W / 2, VIEW_H / 2 + 6);
+      } else if (game.state === "clear") {
+        ctx.fillStyle = "#ffdc5c";
+        ctx.font = "bold 28px monospace";
+        ctx.fillText("ROUND CLEAR", VIEW_W / 2, VIEW_H / 2);
+      } else if (game.state === "gameover") {
+        ctx.fillStyle = "#ff4d5d";
+        ctx.font = "bold 32px monospace";
+        ctx.fillText("GAME OVER", VIEW_W / 2, VIEW_H / 2 - 22);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "15px monospace";
+        ctx.fillText(`SCORE ${padScore(game.score)}`, VIEW_W / 2, VIEW_H / 2 + 18);
+        ctx.fillText("PRESS SPACE", VIEW_W / 2, VIEW_H / 2 + 48);
+      }
+      ctx.textAlign = "left";
+    }
+
+    function frame(time) {
+      const dt = Math.min(0.033, (time - lastTime) / 1000 || 0);
+      lastTime = time;
+      update(dt);
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key in keys) {
+        keys[event.key] = true;
+        const dirs = {
+          ArrowLeft: [-1, 0],
+          ArrowRight: [1, 0],
+          ArrowUp: [0, -1],
+          ArrowDown: [0, 1]
+        };
+        heldDirection = dirs[event.key];
+        setDirection(heldDirection[0], heldDirection[1]);
+        event.preventDefault();
+      }
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (game.state === "ready" || game.state === "gameover") {
+          startRound();
+        } else {
+          dropSmoke();
+        }
+      }
+    });
+
+    document.addEventListener("keyup", (event) => {
+      if (event.key in keys) {
+        keys[event.key] = false;
+        const dirs = {
+          ArrowLeft: [-1, 0],
+          ArrowRight: [1, 0],
+          ArrowUp: [0, -1],
+          ArrowDown: [0, 1]
+        };
+        if (heldDirection && dirs[event.key][0] === heldDirection[0] && dirs[event.key][1] === heldDirection[1]) {
+          const fallback = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].find((key) => keys[key]);
+          heldDirection = fallback ? dirs[fallback] : null;
+        }
+      }
+    });
+
+    canvas.addEventListener("pointerdown", (event) => {
+      touchStart = { x: event.clientX, y: event.clientY };
+      startRound();
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+      if (!touchStart) return;
+      const dx = event.clientX - touchStart.x;
+      const dy = event.clientY - touchStart.y;
+      if (Math.abs(dx) < 18 && Math.abs(dy) < 18) return;
+      if (Math.abs(dx) > Math.abs(dy)) setDirection(dx > 0 ? 1 : -1, 0);
+      else setDirection(0, dy > 0 ? 1 : -1);
+      heldDirection = game.player.nextX || game.player.nextY ? [game.player.nextX, game.player.nextY] : heldDirection;
+      touchStart = { x: event.clientX, y: event.clientY };
+    });
+
+    canvas.addEventListener("pointerup", () => {
+      touchStart = null;
+    });
+
+    musicToggle.addEventListener("click", () => {
+      if (bgm.paused) {
+        startMusic();
+      } else {
+        stopMusic();
+      }
+    });
+
+    bgm.addEventListener("play", syncMusicButton);
+    bgm.addEventListener("pause", syncMusicButton);
+
+    resetGame(false);
+    syncMusicButton();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

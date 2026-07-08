@@ -1,102 +1,130 @@
 # 銀河遊戲大廳 · Galaxy Game Arcade
 
-20 款經典街機遊戲，全部以純 HTML + JavaScript 實現，**無任何外部依賴**，開啟即玩。
+<p align="center">
+  <img src="assets/images/logo.png" alt="銀河遊戲大廳 Logo" width="220">
+</p>
 
-![preview](1.jpg)
+一個純前端的經典遊戲合集。所有遊戲都以單檔 HTML 製作，入口大廳提供搜尋、分類篩選與隨機開玩，開啟靜態伺服器就能直接遊玩。
+
+![preview](assets/images/1.jpg)
+
+---
+
+## 線上展示
+
+GitHub Pages: https://jimmywon1028.github.io/games/
+
+---
+
+## 目前內容
+
+- **21 款遊戲**，涵蓋街機、射擊、益智、棋類、卡牌與動作類型
+- **無框架、無打包流程**，主要使用 HTML / CSS / JavaScript / Canvas 2D
+- **遊戲大廳**支援關鍵字搜尋、分類篩選、顯示數量與隨機進入遊戲
+- **迷魂車**使用 `assets/audio/` 內的專屬 MP3 音效與 BGM
+- 圖片與音效資產已集中到 `assets/`，遊戲頁集中到 `games/`
 
 ---
 
 ## 遊戲列表
 
-| 遊戲 | 分類 | 玩法 |
-|---|---|---|
-| 🐍 **貪吃蛇** · 霓光版 | 休閒 | 方向鍵控制蛇吃食物，越吃越長 |
-| 🐝 **小蜜蜂 豪華版** | 射擊 | 經典 Galaga 縱向射擊，關卡推進 |
-| 🧱 **俄羅斯方塊 豪華版** | 消除 | 標準方塊消除，含暫存區與預覽 |
-| 🏓 **打磚塊 豪華版** | 街機 | 反彈擊碎所有磚塊，多重道具 |
-| 🧠 **記憶翻牌 豪華版** | 益智 | 配對翻牌，考驗記憶力 |
-| 🚀 **太空大戰** | 射擊 | 橫向太空射擊，閃避敵機 |
-| 🔥 **火鳳凰** | 射擊 | 鳳凰主題縱向射擊 |
-| ✈️ **雷電飛機 Remastered** | 射擊 | 縱向彈幕射擊，經典雷電玩法 |
-| 🃏 **21 點 豪華版** | 卡牌 | 莊家對戰，Blackjack 規則 |
-| 🪙 **金樸克** | 卡牌 | 街機 Video Poker 撲克 |
-| ⚫ **五子棋** | 棋類 | 人機對弈，先連五子者勝 |
-| 💣 **炸彈人** | 動作 | 迷宮放置炸彈，爆破敵人 |
-| 🚗 **迷魂車** | 迷宮追逐 | 經典 Rally-X，捲動迷宮、雷達、放煙霧甩開敵車 |
-| 🛡️ **坦克大戰 豪華版** | 動作 | Battle City 風格坦克對戰 |
-| 🦖 **恐龍快跑** | 跑酷 | Chrome 恐龍跳躍躲避障礙 |
-| ⚪ **黑白棋 Reversi** | 棋類 | 翻轉對手棋子 |
-| ♟️ **中國象棋** | 棋類 | 人機對弈，完整象棋規則 |
-| 🐦 **Flappy Bird** | 休閒 | 經典點擊飛越管道 |
-| 💥 **掃雷** | 益智 | 經典邏輯推理踩雷 |
-| 🖱️ **點擊大師** | 放置 | 點擊升級，放置累積 |
-| 🥊 **快打旋風 街頭對決** | 格鬥 | 1v1 格鬥，必殺技系統 |
-
----
-
-## 技術特點
-
-- **100% 純前端** — 僅 HTML / CSS / JavaScript，無框架、無套件
-- **17 款 Canvas 2D 渲染**，使用 `requestAnimationFrame` 驅動遊戲循環
-- **3 款純 DOM 操作**（點擊大師、金樸克、掃雷）
-- **暗色太空主題** UI 設計系統，統一的 CSS 變數架構（`--bg-1`, `--accent`, `--danger` 等）
-- **自製 AI** — 五子棋、黑白棋、中國象棋皆有實作 AI 對手
-- **自製音效** — 部分遊戲使用 Web Audio API 合成音效，無外部音檔
+| 遊戲 | 分類 | 檔案 | 玩法重點 |
+|---|---|---|---|
+| 貪吃蛇 | 街機 / 休閒 | `games/snake.html` | 控制蛇吃食物、避免撞牆與撞到自己 |
+| 小蜜蜂 | 射擊 | `games/bee.html` | 縱向射擊、閃避敵機並推進關卡 |
+| 俄羅斯方塊 豪華版 | 益智 / 消除 | `games/tetris.html` | 方塊消除、暫存區與下一顆預覽 |
+| 打磚塊 | 街機 | `games/breakout.html` | 控制板子反彈球，擊碎所有磚塊 |
+| 記憶翻牌 | 益智 | `games/memory.html` | 翻牌配對，考驗記憶力 |
+| 太空大戰 | 射擊 | `games/space.html` | 橫向太空射擊，閃避敵機 |
+| 火鳳凰 | 射擊 | `games/phoenix.html` | 鳳凰主題飛行射擊 |
+| 雷電飛機 | 射擊 | `games/raiden.html` | 縱向彈幕射擊 |
+| 21 點 | 卡牌 | `games/blackjack.html` | Blackjack 規則，和莊家比點數 |
+| 金樸克 | 卡牌 | `games/goldpoker.html` | 街機 Video Poker 玩法 |
+| 五子棋 | 棋類 | `games/gomoku.html` | 人機對弈，先連五子獲勝 |
+| 炸彈人 | 動作 | `games/bomberman.html` | 迷宮放炸彈、爆破障礙與敵人 |
+| 迷魂車 豪華版 | 街機 / 迷宮 | `games/rallyx.html` | Rally-X 風格追逐、雷達、旗子、煙霧與專屬音效 |
+| 坦克大戰 | 動作 | `games/tank.html` | Battle City 風格坦克對戰 |
+| 恐龍快跑 | 街機 / 跑酷 | `games/dinosaur.html` | 跳躍閃避障礙 |
+| 黑白棋 | 棋類 | `games/reversi.html` | 翻轉棋子、爭取最大盤面 |
+| 中國象棋 | 棋類 | `games/xiangqi.html` | 中國象棋人機對弈 |
+| Flappy Bird | 街機 | `games/flappybird.html` | 點擊飛越管道 |
+| 掃雷 | 益智 | `games/minesweeper.html` | 推理格子，避開地雷 |
+| 點擊大師 | 街機 / 放置 | `games/clicker.html` | 點擊升級與放置成長 |
+| 快打旋風 | 動作 / 格鬥 | `games/streetfighter.html` | 1v1 格鬥對戰 |
 
 ---
 
 ## 快速開始
 
+這是純靜態專案，使用任何靜態檔伺服器都可以。
+
 ```bash
-# 任何靜態檔伺服器均可
-npx serve .
-# 或
 python3 -m http.server 8080
 ```
 
-開啟瀏覽器訪問 `http://localhost:8080` 即可進入遊戲大廳。
+開啟：
+
+```text
+http://localhost:8080
+```
+
+也可以使用其他靜態伺服器，例如：
+
+```bash
+npx serve .
+```
 
 ---
 
 ## 專案結構
 
-```
+```text
 games/
-├── README.md               # 本說明
-├── index.html              # 遊戲大廳（入口）
-├── 1.jpg                   # 預覽圖
-├── snake.html              # 貪吃蛇
-├── bee.html                # 小蜜蜂
-├── tetris.html             # 俄羅斯方塊
-├── breakout.html           # 打磚塊
-├── memory.html             # 記憶翻牌
-├── space.html              # 太空大戰
-├── phoenix.html            # 火鳳凰
-├── raiden.html             # 雷電飛機
-├── blackjack.html          # 21 點
-├── goldpoker.html          # 金樸克
-├── gomoku.html             # 五子棋
-├── bomberman.html          # 炸彈人
-├── tank.html               # 坦克大戰
-├── dinosaur.html           # 恐龍快跑
-├── reversi.html            # 黑白棋
-├── xiangqi.html            # 中國象棋
-├── flappybird.html         # Flappy Bird
-├── minesweeper.html        # 掃雷
-├── clicker.html            # 點擊大師
-├── rallyx.html             # 迷魂車 (Rally-X)
-└── streetfighter.html      # 快打旋風
+├── index.html              # 遊戲大廳入口
+├── README.md               # 專案說明
+├── AGENTS.md               # Codex 維護規則
+├── assets/
+│   ├── images/
+│   │   ├── logo.png        # 專案 Logo
+│   │   └── 1.jpg           # README 預覽圖
+│   └── audio/
+│       ├── 01_High Score.mp3
+│       ├── 02_Level BGM.mp3
+│       ├── 03_Level Finish.mp3
+│       ├── 04_Bonus Round Start.mp3
+│       └── 05_Game Start.mp3
+└── games/
+    ├── snake.html
+    ├── bee.html
+    ├── tetris.html
+    ├── breakout.html
+    ├── memory.html
+    ├── space.html
+    ├── phoenix.html
+    ├── raiden.html
+    ├── blackjack.html
+    ├── goldpoker.html
+    ├── gomoku.html
+    ├── bomberman.html
+    ├── rallyx.html
+    ├── tank.html
+    ├── dinosaur.html
+    ├── reversi.html
+    ├── xiangqi.html
+    ├── flappybird.html
+    ├── minesweeper.html
+    ├── clicker.html
+    └── streetfighter.html
 ```
 
 ---
 
-## 遊戲大廳功能
+## 維護重點
 
-`index.html` 提供完整的遊戲入口體驗：
-
-- 🔍 **搜尋篩選** — 按名稱或關鍵字即時過濾遊戲
-- 🎲 **隨機開玩** — 一鍵隨機進入遊戲
-- 響應式設計 — 桌機與手機皆可瀏覽
+- 新增遊戲時，同步更新 `index.html` 的卡片與本 README 的遊戲列表。
+- 遊戲頁放在 `games/`，圖片放在 `assets/images/`，音效放在 `assets/audio/`。
+- 檔名含空白的音效在 HTML 中要使用 URL encoded 路徑，例如 `%20`。
+- 單一遊戲修改後，至少確認頁面可載入、console 無明顯錯誤、鍵盤或觸控主要操作可用。
 
 ---
 
